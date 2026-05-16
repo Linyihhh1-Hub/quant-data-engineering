@@ -6,6 +6,7 @@ from quant_data.backtest.simple import run_simple_backtest
 from quant_data.cleaning.daily import clean_daily_bars
 from quant_data.evaluation.factor import evaluate_factor
 from quant_data.factors.baseline import compute_baseline_factors
+from quant_data.ingestion.akshare_a_share import ingest_stock_daily
 from quant_data.quality.rules import run_quality_checks
 from quant_data.storage.parquet import read_parquet, write_parquet
 
@@ -26,6 +27,23 @@ def run_clean(input_path: Path, output_dir: Path) -> Path:
     cleaned = clean_daily_bars(raw)
     output_path = _output_paths(output_dir, "factor")["dwd"]
     return write_parquet(cleaned, output_path)
+
+
+def run_ingest_akshare(
+    symbols: str,
+    start_date: str,
+    end_date: str,
+    output_path: Path,
+    adjust: str,
+) -> Path:
+    symbol_list = [symbol.strip() for symbol in symbols.split(",") if symbol.strip()]
+    return ingest_stock_daily(
+        symbols=symbol_list,
+        start_date=start_date,
+        end_date=end_date,
+        output_path=output_path,
+        adjust=adjust,
+    )
 
 
 def run_quality(output_dir: Path, min_rows_per_date: int, abnormal_return_threshold: float) -> Path:
@@ -90,6 +108,13 @@ def build_parser() -> argparse.ArgumentParser:
     clean.add_argument("--input", type=Path, required=True)
     add_common(clean)
 
+    ingest_akshare = subparsers.add_parser("ingest-akshare")
+    ingest_akshare.add_argument("--symbols", required=True)
+    ingest_akshare.add_argument("--start-date", required=True)
+    ingest_akshare.add_argument("--end-date", required=True)
+    ingest_akshare.add_argument("--adjust", default="qfq")
+    ingest_akshare.add_argument("--output", type=Path, default=Path("data/ods/stock_daily.parquet"))
+
     quality = subparsers.add_parser("quality")
     add_common(quality)
     quality.add_argument("--min-rows-per-date", type=int, default=1)
@@ -132,6 +157,8 @@ def main(argv: list[str] | None = None) -> int:
     # CLI 只负责串联各阶段；具体业务逻辑仍然放在 cleaning/quality/factors 等模块里。
     if args.command == "clean":
         run_clean(args.input, args.output_dir)
+    elif args.command == "ingest-akshare":
+        run_ingest_akshare(args.symbols, args.start_date, args.end_date, args.output, args.adjust)
     elif args.command == "quality":
         run_quality(args.output_dir, args.min_rows_per_date, args.abnormal_return_threshold)
     elif args.command == "factors":

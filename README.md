@@ -98,6 +98,17 @@ total_return, annualized_return, max_drawdown, sharpe, turnover
 
 ## CLI Pipeline
 
+Fetch real A-share daily data with AkShare:
+
+```powershell
+.\.venv\Scripts\python.exe -m quant_data.cli ingest-akshare `
+  --symbols 000001,600000,600519 `
+  --start-date 20240101 `
+  --end-date 20241231 `
+  --adjust qfq `
+  --output data/ods/stock_daily.parquet
+```
+
 Run all local pipeline stages from a raw ODS Parquet file:
 
 ```powershell

@@ -1,4 +1,6 @@
 import json
+import sys
+import types
 
 import pandas as pd
 
@@ -58,3 +60,43 @@ def test_cli_run_all_writes_pipeline_outputs(tmp_path):
     assert metrics_path.exists()
     metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
     assert {"total_return", "annualized_return", "max_drawdown", "sharpe", "turnover"} == set(metrics)
+
+
+def test_cli_ingest_akshare_writes_ods_file(monkeypatch, tmp_path):
+    fake = types.ModuleType("akshare")
+
+    def stock_zh_a_hist(symbol: str, period: str, start_date: str, end_date: str, adjust: str):
+        return pd.DataFrame(
+            [
+                {
+                    "日期": "2024-01-02",
+                    "开盘": 10.0,
+                    "最高": 10.5,
+                    "最低": 9.8,
+                    "收盘": 10.2,
+                    "成交量": 1000,
+                    "成交额": 10200,
+                }
+            ]
+        )
+
+    fake.stock_zh_a_hist = stock_zh_a_hist
+    monkeypatch.setitem(sys.modules, "akshare", fake)
+
+    exit_code = main(
+        [
+            "ingest-akshare",
+            "--symbols",
+            "000001,600000",
+            "--start-date",
+            "20240101",
+            "--end-date",
+            "20240131",
+            "--output",
+            str(tmp_path / "ods" / "stock_daily.parquet"),
+        ]
+    )
+
+    result = pd.read_parquet(tmp_path / "ods" / "stock_daily.parquet")
+    assert exit_code == 0
+    assert result["symbol"].tolist() == ["000001", "600000"]
