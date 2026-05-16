@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "quant-data-engineering"
+version = "0.1.0"
+description = "A-share quant factor data engineering pipeline"
+requires-python = ">=3.10"
+dependencies = [
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "pyarrow>=14.0",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = "-q"

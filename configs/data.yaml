@@ -1,0 +1,9 @@
+paths:
+  data_dir: data
+  ods_dir: data/ods
+  dwd_dir: data/dwd
+  ads_dir: data/ads
+  reports_dir: data/reports
+
+cleaning:
+  abnormal_return_threshold: 0.2
