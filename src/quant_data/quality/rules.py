@@ -7,6 +7,7 @@ REPORT_COLUMNS = ["rule_name", "status", "failed_count", "failed_sample"]
 def _sample(frame: pd.DataFrame) -> str:
     if frame.empty:
         return ""
+    # 质量报告只保留少量失败样例，避免真实数据下报告字段过大。
     return frame.head(5).to_dict(orient="records").__repr__()
 
 
@@ -66,6 +67,7 @@ def run_quality_checks(
     min_rows_per_date: int = 1,
     abnormal_return_threshold: float = 0.2,
 ) -> pd.DataFrame:
+    # 每条规则都返回统一结构，方便后续落表、告警或接入调度系统。
     results = [
         build_result("primary_key_unique", _duplicate_primary_keys(frame)),
         build_result("required_fields_not_null", _null_required_fields(frame)),
@@ -75,4 +77,3 @@ def run_quality_checks(
         build_result("abnormal_return", _abnormal_returns(frame, abnormal_return_threshold)),
     ]
     return pd.DataFrame(results, columns=REPORT_COLUMNS)
-

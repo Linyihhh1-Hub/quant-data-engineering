@@ -95,3 +95,27 @@ Backtest metrics:
 ```text
 total_return, annualized_return, max_drawdown, sharpe, turnover
 ```
+
+## CLI Pipeline
+
+Run all local pipeline stages from a raw ODS Parquet file:
+
+```powershell
+.\.venv\Scripts\python.exe -m quant_data.cli run-all `
+  --input data/ods/stock_daily.parquet `
+  --output-dir data `
+  --factor-name momentum_20d
+```
+
+Stage outputs:
+
+```text
+data/dwd/stock_daily.parquet
+data/reports/data_quality_report.parquet
+data/ads/factor_wide_daily.parquet
+data/ads/factor_eval_<factor_name>.parquet
+data/ads/backtest_daily_<factor_name>.parquet
+data/ads/backtest_metrics_<factor_name>.json
+```
+
+Chinese documentation: [README.zh-CN.md](README.zh-CN.md)

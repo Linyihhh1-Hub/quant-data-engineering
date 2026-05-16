@@ -21,6 +21,7 @@ def compute_baseline_factors(frame: pd.DataFrame) -> pd.DataFrame:
     result["trade_date"] = pd.to_datetime(result["trade_date"]).astype("datetime64[ns]")
     result = result.sort_values(["symbol", "trade_date"]).reset_index(drop=True)
 
+    # 所有滚动窗口都必须按股票分组计算，避免把 A 股票历史价格滚到 B 股票上。
     grouped = result.groupby("symbol", group_keys=False)
     close = grouped["close"]
     volume = grouped["volume"]

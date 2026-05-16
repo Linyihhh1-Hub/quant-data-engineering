@@ -11,6 +11,7 @@ def add_forward_return(daily_bars: pd.DataFrame, horizon: int = 5) -> pd.DataFra
     result = daily_bars.copy()
     result["trade_date"] = pd.to_datetime(result["trade_date"]).astype("datetime64[ns]")
     result = result.sort_values(["symbol", "trade_date"]).reset_index(drop=True)
+    # 未来收益按股票向前对齐，是因子有效性检验的目标变量。
     next_close = result.groupby("symbol")["close"].shift(-horizon)
     result["forward_return"] = next_close / result["close"] - 1
     return result
@@ -46,6 +47,7 @@ def compute_ic_report(
     joined = _joined_factor_returns(factors, daily_bars, factor_name, horizon)
     rows = []
     for trade_date, group in joined.groupby("trade_date"):
+        # 常数截面无法计算相关系数，直接跳过，避免输出无意义的 NaN 指标。
         if len(group) < 2 or group[factor_name].nunique() < 2 or group["forward_return"].nunique() < 2:
             continue
         rows.append(
@@ -72,6 +74,7 @@ def compute_group_return_report(
         if group[factor_name].nunique() < groups:
             continue
         ranked = group.copy()
+        # qcut 按因子值做截面分组，0 是低因子组，groups-1 是高因子组。
         ranked["factor_group"] = pd.qcut(
             ranked[factor_name], q=groups, labels=False, duplicates="drop"
         )
@@ -112,5 +115,3 @@ def evaluate_factor(
         factors, daily_bars, factor_name, horizon, groups
     )
     return ic_report.merge(group_report, on=["trade_date", "factor_name"], how="inner")
-
-
