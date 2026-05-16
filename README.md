@@ -79,3 +79,19 @@ Evaluation report schema:
 ```text
 trade_date, factor_name, ic, rank_ic, top_group_return, bottom_group_return, long_short_return
 ```
+
+## Phase 5: Simple Backtest
+
+Implemented a simple factor-based backtest:
+
+- Select stocks in the top factor quantile on rebalance dates
+- Hold selected stocks with equal weights
+- Apply configurable transaction cost on rebalances after initial position setup
+- Use equal-weight universe return as benchmark
+- Output daily portfolio net value, benchmark net value, daily return, benchmark return, and drawdown
+
+Backtest metrics:
+
+```text
+total_return, annualized_return, max_drawdown, sharpe, turnover
+```
