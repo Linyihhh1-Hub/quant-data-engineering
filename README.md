@@ -64,3 +64,18 @@ ma_bias_20d = close / rolling_mean(close, 20) - 1
 ```
 
 All rolling calculations are grouped by `symbol` and sorted by `symbol, trade_date`.
+
+## Phase 4: Factor Evaluation
+
+Implemented factor effectiveness evaluation:
+
+- Forward return by symbol: `close.shift(-horizon) / close - 1`
+- IC: cross-sectional Pearson correlation between factor value and forward return
+- RankIC: Pearson correlation between factor rank and forward return rank
+- Grouped returns: compare top group, bottom group, and long-short return
+
+Evaluation report schema:
+
+```text
+trade_date, factor_name, ic, rank_ic, top_group_return, bottom_group_return, long_short_return
+```
