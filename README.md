@@ -11,3 +11,17 @@ Implemented foundation:
 - Parquet storage helpers
 - DWD daily bar cleaning
 - Unit tests with fixture data
+
+## Development
+
+Install in editable mode:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+```
+
+Run tests:
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+```
