@@ -100,3 +100,65 @@ def test_cli_ingest_akshare_writes_ods_file(monkeypatch, tmp_path):
     result = pd.read_parquet(tmp_path / "ods" / "stock_daily.parquet")
     assert exit_code == 0
     assert result["symbol"].tolist() == ["000001", "600000"]
+
+
+def test_cli_load_clickhouse_uses_pipeline_outputs(monkeypatch, tmp_path):
+    calls = {}
+
+    class FakeClient:
+        pass
+
+    def fake_get_client(host: str, port: int, username: str, password: str, database: str):
+        calls["connection"] = {
+            "host": host,
+            "port": port,
+            "username": username,
+            "password": password,
+            "database": database,
+        }
+        return FakeClient()
+
+    def fake_load_pipeline_outputs(client, data_dir, factor_name: str):
+        calls["load"] = {
+            "client_type": type(client).__name__,
+            "data_dir": str(data_dir),
+            "factor_name": factor_name,
+        }
+        return {"dwd_stock_daily": 1}
+
+    monkeypatch.setattr("quant_data.cli.get_clickhouse_client", fake_get_client)
+    monkeypatch.setattr("quant_data.cli.load_pipeline_outputs", fake_load_pipeline_outputs)
+
+    exit_code = main(
+        [
+            "load-clickhouse",
+            "--output-dir",
+            str(tmp_path),
+            "--factor-name",
+            "momentum_20d",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "8123",
+            "--username",
+            "default",
+            "--password",
+            "secret",
+            "--database",
+            "quant_data",
+        ]
+    )
+
+    assert exit_code == 0
+    assert calls["connection"] == {
+        "host": "127.0.0.1",
+        "port": 8123,
+        "username": "default",
+        "password": "secret",
+        "database": "quant_data",
+    }
+    assert calls["load"] == {
+        "client_type": "FakeClient",
+        "data_dir": str(tmp_path),
+        "factor_name": "momentum_20d",
+    }

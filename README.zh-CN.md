@@ -170,6 +170,38 @@ data/ads/backtest\_daily\_<factor\_name>.parquet
 data/ads/backtest\_metrics\_<factor\_name>.json
 ```
 
+## 写入 ClickHouse
+
+如果本地 ClickHouse 已启动，可以把 Parquet 输出写入数据库：
+
+```powershell
+.\.venv\Scripts\python.exe -m quant_data.cli load-clickhouse `
+  --output-dir data `
+  --factor-name momentum_20d `
+  --host 127.0.0.1 `
+  --port 8123 `
+  --username default `
+  --password <你的 ClickHouse 密码> `
+  --database quant_data
+```
+
+导入后会创建 4 张表：
+
+```text
+dwd_stock_daily
+ads_factor_wide_daily
+ads_factor_eval
+ads_backtest_daily
+```
+
+可以在数据库工具里执行：
+
+```sql
+SHOW TABLES;
+SELECT count() FROM dwd_stock_daily;
+SELECT * FROM ads_factor_wide_daily LIMIT 10;
+```
+
 ## 测试
 
 安装开发依赖：
@@ -198,4 +230,5 @@ data/ads/backtest\_metrics\_<factor\_name>.json
 ## 简历描述参考
 
 构建 A 股量化因子数据工程项目，基于 Python/pandas/Parquet 实现 ODS-DWD-ADS 分层数据链路，完成日线行情清洗、数据质量校验、基础因子宽表构建、IC/RankIC/分组收益评估和简单因子回测，并通过 CLI 串联为可复用的数据流水线。
+
 

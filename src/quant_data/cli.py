@@ -8,6 +8,8 @@ from quant_data.evaluation.factor import evaluate_factor
 from quant_data.factors.baseline import compute_baseline_factors
 from quant_data.ingestion.akshare_a_share import ingest_stock_daily
 from quant_data.quality.rules import run_quality_checks
+from quant_data.storage.clickhouse import get_client as get_clickhouse_client
+from quant_data.storage.clickhouse import load_pipeline_outputs
 from quant_data.storage.parquet import read_parquet, write_parquet
 
 
@@ -97,6 +99,25 @@ def run_backtest(
     return daily_path, metrics_path
 
 
+def run_load_clickhouse(
+    output_dir: Path,
+    factor_name: str,
+    host: str,
+    port: int,
+    username: str,
+    password: str,
+    database: str,
+) -> dict[str, int]:
+    client = get_clickhouse_client(
+        host=host,
+        port=port,
+        username=username,
+        password=password,
+        database=database,
+    )
+    return load_pipeline_outputs(client, output_dir, factor_name=factor_name)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run quant data engineering pipeline stages.")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -136,6 +157,15 @@ def build_parser() -> argparse.ArgumentParser:
     backtest.add_argument("--rebalance-interval", type=int, default=20)
     backtest.add_argument("--transaction-cost", type=float, default=0.001)
 
+    load_clickhouse = subparsers.add_parser("load-clickhouse")
+    add_common(load_clickhouse)
+    load_clickhouse.add_argument("--factor-name", default="momentum_20d")
+    load_clickhouse.add_argument("--host", default="127.0.0.1")
+    load_clickhouse.add_argument("--port", type=int, default=8123)
+    load_clickhouse.add_argument("--username", default="default")
+    load_clickhouse.add_argument("--password", required=True)
+    load_clickhouse.add_argument("--database", default="quant_data")
+
     run_all = subparsers.add_parser("run-all")
     run_all.add_argument("--input", type=Path, required=True)
     add_common(run_all)
@@ -172,6 +202,16 @@ def main(argv: list[str] | None = None) -> int:
             args.top_quantile,
             args.rebalance_interval,
             args.transaction_cost,
+        )
+    elif args.command == "load-clickhouse":
+        run_load_clickhouse(
+            args.output_dir,
+            args.factor_name,
+            args.host,
+            args.port,
+            args.username,
+            args.password,
+            args.database,
         )
     elif args.command == "run-all":
         run_clean(args.input, args.output_dir)

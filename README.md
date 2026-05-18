@@ -130,3 +130,27 @@ data/ads/backtest_metrics_<factor_name>.json
 ```
 
 Chinese documentation: [README.zh-CN.md](README.zh-CN.md)
+
+## ClickHouse Load
+
+Load generated Parquet outputs into local ClickHouse:
+
+```powershell
+.\.venv\Scripts\python.exe -m quant_data.cli load-clickhouse `
+  --output-dir data `
+  --factor-name momentum_20d `
+  --host 127.0.0.1 `
+  --port 8123 `
+  --username default `
+  --password <your-clickhouse-password> `
+  --database quant_data
+```
+
+Created tables:
+
+```text
+dwd_stock_daily
+ads_factor_wide_daily
+ads_factor_eval
+ads_backtest_daily
+```
