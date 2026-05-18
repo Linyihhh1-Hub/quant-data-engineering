@@ -141,7 +141,9 @@ CLI 的作用是把各个模块串成可执行的数据流水线。每个命令�
   --output data/ods/stock_daily.parquet `
   --report data/reports/ingestion_report.parquet `
   --retries 3 `
-  --retry-wait-seconds 2
+  --retry-wait-seconds 2 `
+  --incremental `
+  --run-log data/reports/ingestion_runs.parquet
 ```
 
 股票池文件必须包含 `symbol` 列，可以额外包含 `name` 等说明字段。采集报告会记录每只股票的采集结果：
@@ -150,7 +152,7 @@ CLI 的作用是把各个模块串成可执行的数据流水线。每个命令�
 symbol, status, row_count, message
 ```
 
-`--retries` 和 `--retry-wait-seconds` 用于处理外部行情接口的短暂网络失败。批量采集时建议开启重试，失败股票可以根据采集报告单独补采。
+`--retries` 和 `--retry-wait-seconds` 用于处理外部行情接口的短暂网络失败。`--incremental` 会基于已有 ODS 文件判断每只股票的最新日期，只补采缺失日期；`--run-log` 会记录每次采集任务的运行汇总。批量采集时建议开启重试，失败股票可以根据采集报告单独补采。
 
 这个命令会调用 AkShare 的 A 股历史行情接口，生成项目后续流水线需要的 ODS 文件：
 

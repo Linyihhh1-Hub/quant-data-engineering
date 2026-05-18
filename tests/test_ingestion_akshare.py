@@ -135,3 +135,84 @@ def test_ingest_stock_daily_retries_transient_symbol_failure(monkeypatch, tmp_pa
     assert attempts["000001"] == 2
     assert result["symbol"].tolist() == ["000001"]
     assert report["status"].tolist() == ["SUCCESS"]
+
+
+def test_ingest_stock_daily_incremental_fetches_only_missing_dates(monkeypatch, tmp_path):
+    calls = []
+    fake = types.ModuleType("akshare")
+    output_path = tmp_path / "ods" / "stock_daily.parquet"
+    output_path.parent.mkdir(parents=True)
+    pd.DataFrame(
+        [
+            {
+                "trade_date": "2024-01-02",
+                "symbol": "000001",
+                "open": 10.0,
+                "high": 10.5,
+                "low": 9.8,
+                "close": 10.2,
+                "volume": 1000,
+                "amount": 10200,
+            }
+        ]
+    ).to_parquet(output_path, index=False)
+
+    def stock_zh_a_hist(symbol: str, period: str, start_date: str, end_date: str, adjust: str):
+        calls.append({"symbol": symbol, "start_date": start_date, "end_date": end_date})
+        return pd.DataFrame(
+            [
+                {
+                    "日期": pd.to_datetime(start_date).strftime("%Y-%m-%d"),
+                    "开盘": 11.0,
+                    "最高": 11.5,
+                    "最低": 10.8,
+                    "收盘": 11.2,
+                    "成交量": 1100,
+                    "成交额": 11200,
+                }
+            ]
+        )
+
+    fake.stock_zh_a_hist = stock_zh_a_hist
+    monkeypatch.setitem(sys.modules, "akshare", fake)
+
+    result_path, report_path = ingest_stock_daily(
+        symbols=["000001", "600000"],
+        start_date="20240101",
+        end_date="20240105",
+        output_path=output_path,
+        report_path=tmp_path / "reports" / "ingestion_report.parquet",
+        incremental=True,
+        retry_wait_seconds=0,
+    )
+
+    result = pd.read_parquet(result_path)
+    report = pd.read_parquet(report_path)
+    assert calls == [
+        {"symbol": "000001", "start_date": "20240103", "end_date": "20240105"},
+        {"symbol": "600000", "start_date": "20240101", "end_date": "20240105"},
+    ]
+    assert len(result) == 3
+    assert result.duplicated(subset=["trade_date", "symbol"]).sum() == 0
+    assert report["status"].tolist() == ["SUCCESS", "SUCCESS"]
+
+
+def test_ingest_stock_daily_writes_run_log(monkeypatch, tmp_path):
+    install_fake_akshare(monkeypatch, fail_symbols={"600000"})
+
+    ingest_stock_daily(
+        symbols=["000001", "600000"],
+        start_date="20240101",
+        end_date="20240131",
+        output_path=tmp_path / "ods" / "stock_daily.parquet",
+        report_path=tmp_path / "reports" / "ingestion_report.parquet",
+        run_log_path=tmp_path / "reports" / "ingestion_runs.parquet",
+        retry_wait_seconds=0,
+    )
+
+    run_log = pd.read_parquet(tmp_path / "reports" / "ingestion_runs.parquet")
+    assert len(run_log) == 1
+    assert run_log.loc[0, "symbols_count"] == 2
+    assert run_log.loc[0, "success_count"] == 1
+    assert run_log.loc[0, "failed_count"] == 1
+    assert run_log.loc[0, "output_rows"] == 1

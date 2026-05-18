@@ -2,9 +2,11 @@ from importlib import import_module
 from pathlib import Path
 from time import sleep
 from typing import Iterable
+from uuid import uuid4
 
 import pandas as pd
 
+from quant_data.storage.parquet import read_parquet
 from quant_data.storage.parquet import write_parquet
 
 AKSHARE_COLUMN_MAP = {
@@ -18,6 +20,35 @@ AKSHARE_COLUMN_MAP = {
 }
 
 ODS_COLUMNS = ["trade_date", "symbol", "open", "high", "low", "close", "volume", "amount"]
+
+
+def _format_akshare_date(value: pd.Timestamp) -> str:
+    return value.strftime("%Y%m%d")
+
+
+def _next_fetch_start(existing: pd.DataFrame, symbol: str, requested_start: str) -> str:
+    if existing.empty or "symbol" not in existing.columns or "trade_date" not in existing.columns:
+        return requested_start
+    symbol_rows = existing[existing["symbol"].astype(str).str.strip() == symbol]
+    if symbol_rows.empty:
+        return requested_start
+    max_date = pd.to_datetime(symbol_rows["trade_date"]).max()
+    next_date = max_date + pd.Timedelta(days=1)
+    requested = pd.to_datetime(requested_start)
+    return _format_akshare_date(max(next_date, requested))
+
+
+def _append_run_log(
+    run_log_path: str | Path,
+    row: dict[str, object],
+) -> Path:
+    path = Path(run_log_path)
+    if path.exists():
+        existing = read_parquet(path)
+        frame = pd.concat([existing, pd.DataFrame([row])], ignore_index=True)
+    else:
+        frame = pd.DataFrame([row])
+    return write_parquet(frame, path)
 
 
 def _load_akshare():
@@ -67,24 +98,39 @@ def ingest_stock_daily(
     adjust: str = "qfq",
     retries: int = 2,
     retry_wait_seconds: float = 1.0,
+    incremental: bool = False,
+    run_log_path: str | Path | None = None,
 ) -> tuple[Path, Path]:
     if retries < 0:
         raise ValueError("retries must be >= 0")
     if retry_wait_seconds < 0:
         raise ValueError("retry_wait_seconds must be >= 0")
 
+    started_at = pd.Timestamp.now(tz="UTC")
+    output = Path(output_path)
+    existing = read_parquet(output) if incremental and output.exists() else pd.DataFrame(columns=ODS_COLUMNS)
     frames = []
     report_rows = []
-    for symbol in symbols:
-        normalized_symbol = symbol.strip()
-        if not normalized_symbol:
+    normalized_symbols = [symbol.strip() for symbol in symbols if symbol.strip()]
+    requested_end = pd.to_datetime(end_date)
+    for normalized_symbol in normalized_symbols:
+        fetch_start_date = _next_fetch_start(existing, normalized_symbol, start_date) if incremental else start_date
+        if pd.to_datetime(fetch_start_date) > requested_end:
+            report_rows.append(
+                {
+                    "symbol": normalized_symbol,
+                    "status": "SKIPPED",
+                    "row_count": 0,
+                    "message": "Already up to date",
+                }
+            )
             continue
         last_error: Exception | None = None
         try:
             # 外部行情接口偶发网络失败时，按单只股票重试，避免整批采集被短暂抖动击穿。
             for attempt in range(retries + 1):
                 try:
-                    frame = fetch_stock_daily(normalized_symbol, start_date, end_date, adjust=adjust)
+                    frame = fetch_stock_daily(normalized_symbol, fetch_start_date, end_date, adjust=adjust)
                     break
                 except Exception as error:  # noqa: BLE001 - 这里需要保留原始异常写入采集报告。
                     last_error = error
@@ -123,10 +169,33 @@ def ingest_stock_daily(
             )
 
     report_output = write_parquet(pd.DataFrame(report_rows), report_path)
-    if not frames:
+    if not frames and existing.empty:
         detail = "; ".join(row["message"] for row in report_rows if row["status"] == "FAILED")
         raise RuntimeError(f"No stock data fetched. Failures: {detail}")
 
-    combined = pd.concat(frames, ignore_index=True)
+    combined = pd.concat([existing, *frames], ignore_index=True)
+    combined["trade_date"] = pd.to_datetime(combined["trade_date"]).astype("datetime64[ns]")
+    combined = combined.drop_duplicates(subset=["trade_date", "symbol"], keep="last")
+    combined = combined.sort_values(["symbol", "trade_date"]).reset_index(drop=True)
     data_output = write_parquet(combined, output_path)
+    if run_log_path:
+        ended_at = pd.Timestamp.now(tz="UTC")
+        statuses = pd.Series([row["status"] for row in report_rows], dtype="string")
+        _append_run_log(
+            run_log_path,
+            {
+                "run_id": str(uuid4()),
+                "started_at": started_at,
+                "ended_at": ended_at,
+                "requested_start_date": start_date,
+                "requested_end_date": end_date,
+                "symbols_count": len(normalized_symbols),
+                "success_count": int((statuses == "SUCCESS").sum()),
+                "failed_count": int((statuses == "FAILED").sum()),
+                "empty_count": int((statuses == "EMPTY").sum()),
+                "skipped_count": int((statuses == "SKIPPED").sum()),
+                "output_rows": len(combined),
+                "incremental": incremental,
+            },
+        )
     return data_output, report_output

@@ -96,14 +96,18 @@ def test_cli_ingest_akshare_writes_ods_file(monkeypatch, tmp_path):
             str(tmp_path / "ods" / "stock_daily.parquet"),
             "--report",
             str(tmp_path / "reports" / "ingestion_report.parquet"),
+            "--run-log",
+            str(tmp_path / "reports" / "ingestion_runs.parquet"),
         ]
     )
 
     result = pd.read_parquet(tmp_path / "ods" / "stock_daily.parquet")
     report = pd.read_parquet(tmp_path / "reports" / "ingestion_report.parquet")
+    run_log = pd.read_parquet(tmp_path / "reports" / "ingestion_runs.parquet")
     assert exit_code == 0
     assert result["symbol"].tolist() == ["000001", "600000"]
     assert report["status"].tolist() == ["SUCCESS", "SUCCESS"]
+    assert run_log.loc[0, "symbols_count"] == 2
 
 
 def test_cli_ingest_akshare_reads_symbols_file(monkeypatch, tmp_path):
@@ -142,14 +146,18 @@ def test_cli_ingest_akshare_reads_symbols_file(monkeypatch, tmp_path):
             str(tmp_path / "ods" / "stock_daily.parquet"),
             "--report",
             str(tmp_path / "reports" / "ingestion_report.parquet"),
+            "--run-log",
+            str(tmp_path / "reports" / "ingestion_runs.parquet"),
         ]
     )
 
     result = pd.read_parquet(tmp_path / "ods" / "stock_daily.parquet")
     report = pd.read_parquet(tmp_path / "reports" / "ingestion_report.parquet")
+    run_log = pd.read_parquet(tmp_path / "reports" / "ingestion_runs.parquet")
     assert exit_code == 0
     assert result["symbol"].tolist() == ["000001", "600000"]
     assert report["symbol"].tolist() == ["000001", "600000"]
+    assert run_log.loc[0, "success_count"] == 2
 
 
 def test_cli_load_clickhouse_uses_pipeline_outputs(monkeypatch, tmp_path):

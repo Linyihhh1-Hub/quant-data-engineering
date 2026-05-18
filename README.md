@@ -120,7 +120,9 @@ You can also manage the universe with a CSV stock pool:
   --output data/ods/stock_daily.parquet `
   --report data/reports/ingestion_report.parquet `
   --retries 3 `
-  --retry-wait-seconds 2
+  --retry-wait-seconds 2 `
+  --incremental `
+  --run-log data/reports/ingestion_runs.parquet
 ```
 
 The stock pool file must contain a `symbol` column. The ingestion report records per-symbol status:
@@ -128,6 +130,8 @@ The stock pool file must contain a `symbol` column. The ingestion report records
 ```text
 symbol, status, row_count, message
 ```
+
+Use `--incremental` to fetch only dates newer than each symbol's latest local ODS record. Use `--run-log` to append one summary row for each ingestion run.
 
 Run all local pipeline stages from a raw ODS Parquet file:
 
