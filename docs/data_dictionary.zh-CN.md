@@ -202,3 +202,5 @@
 | `ops_data_quality_report` | `data/reports/data_quality_report.parquet` | 数据质量检查结果 |
 
 常用监控 SQL 见：`docs/clickhouse_monitoring_queries.sql`。
+
+Python 查询接口说明见：`docs/query_interface.zh-CN.md`。

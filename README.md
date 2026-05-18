@@ -172,6 +172,8 @@ Chinese documentation: [README.zh-CN.md](README.zh-CN.md)
 
 Data dictionary in Chinese: [docs/data_dictionary.zh-CN.md](docs/data_dictionary.zh-CN.md)
 
+Query interface documentation in Chinese: [docs/query_interface.zh-CN.md](docs/query_interface.zh-CN.md)
+
 ## ClickHouse Load
 
 Load generated Parquet outputs into local ClickHouse:

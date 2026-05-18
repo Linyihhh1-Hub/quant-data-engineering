@@ -231,6 +231,8 @@ data/ads/backtest\_metrics\_<factor\_name>.json
 
 字段说明见：[数据说明文档](docs/data_dictionary.zh-CN.md)
 
+数据库查询接口说明见：[数据库查询接口说明](docs/query_interface.zh-CN.md)
+
 ## 写入 ClickHouse
 
 如果本地 ClickHouse 已启动，可以把 Parquet 输出写入数据库：
