@@ -98,6 +98,7 @@ def ingest_stock_daily(
     adjust: str = "qfq",
     retries: int = 2,
     retry_wait_seconds: float = 1.0,
+    request_interval_seconds: float = 0.0,
     incremental: bool = False,
     run_log_path: str | Path | None = None,
 ) -> tuple[Path, Path]:
@@ -105,6 +106,8 @@ def ingest_stock_daily(
         raise ValueError("retries must be >= 0")
     if retry_wait_seconds < 0:
         raise ValueError("retry_wait_seconds must be >= 0")
+    if request_interval_seconds < 0:
+        raise ValueError("request_interval_seconds must be >= 0")
 
     started_at = pd.Timestamp.now(tz="UTC")
     output = Path(output_path)
@@ -167,6 +170,8 @@ def ingest_stock_daily(
                     "message": "AkShare returned empty data",
                 }
             )
+        if request_interval_seconds > 0:
+            sleep(request_interval_seconds)
 
     report_output = write_parquet(pd.DataFrame(report_rows), report_path)
     if not frames and existing.empty:

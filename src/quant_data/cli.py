@@ -4,6 +4,9 @@ from pathlib import Path
 
 from quant_data.backtest.simple import run_simple_backtest
 from quant_data.cleaning.daily import clean_daily_bars
+from quant_data.dimensions.market import write_hs300_symbol_pool
+from quant_data.dimensions.market import write_stock_basic
+from quant_data.dimensions.market import write_trade_calendar
 from quant_data.evaluation.factor import evaluate_factor
 from quant_data.factors.baseline import compute_baseline_factors
 from quant_data.ingestion.akshare_a_share import ingest_stock_daily
@@ -16,6 +19,8 @@ from quant_data.storage.parquet import read_parquet, write_parquet
 
 def _output_paths(output_dir: Path, factor_name: str) -> dict[str, Path]:
     return {
+        "trade_calendar": output_dir / "dim" / "trade_calendar.parquet",
+        "stock_basic": output_dir / "dim" / "stock_basic.parquet",
         "dwd": output_dir / "dwd" / "stock_daily.parquet",
         "quality": output_dir / "reports" / "data_quality_report.parquet",
         "factors": output_dir / "ads" / "factor_wide_daily.parquet",
@@ -42,6 +47,7 @@ def run_ingest_akshare(
     adjust: str,
     retries: int,
     retry_wait_seconds: float,
+    request_interval_seconds: float,
     incremental: bool,
     run_log_path: Path,
 ) -> tuple[Path, Path]:
@@ -64,9 +70,21 @@ def run_ingest_akshare(
         adjust=adjust,
         retries=retries,
         retry_wait_seconds=retry_wait_seconds,
+        request_interval_seconds=request_interval_seconds,
         incremental=incremental,
         run_log_path=run_log_path,
     )
+
+
+def run_dimensions(output_dir: Path, start_date: str, end_date: str) -> tuple[Path, Path]:
+    paths = _output_paths(output_dir, "factor")
+    calendar_path = write_trade_calendar(start_date, end_date, paths["trade_calendar"])
+    stock_basic_path = write_stock_basic(paths["stock_basic"])
+    return calendar_path, stock_basic_path
+
+
+def run_build_hs300_symbols(output_path: Path, filter_st: bool) -> Path:
+    return write_hs300_symbol_pool(output_path, filter_st=filter_st)
 
 
 def run_quality(output_dir: Path, min_rows_per_date: int, abnormal_return_threshold: float) -> Path:
@@ -101,6 +119,9 @@ def run_backtest(
     top_quantile: float,
     rebalance_interval: int,
     transaction_cost: float,
+    commission_rate: float,
+    slippage_rate: float,
+    stamp_tax_rate: float,
 ) -> tuple[Path, Path]:
     paths = _output_paths(output_dir, factor_name)
     cleaned = read_parquet(paths["dwd"])
@@ -112,6 +133,9 @@ def run_backtest(
         top_quantile=top_quantile,
         rebalance_interval=rebalance_interval,
         transaction_cost=transaction_cost,
+        commission_rate=commission_rate,
+        slippage_rate=slippage_rate,
+        stamp_tax_rate=stamp_tax_rate,
     )
     daily_path = write_parquet(daily_result, paths["backtest_daily"])
     metrics_path = paths["backtest_metrics"]
@@ -160,8 +184,18 @@ def build_parser() -> argparse.ArgumentParser:
     ingest_akshare.add_argument("--report", type=Path, default=Path("data/reports/ingestion_report.parquet"))
     ingest_akshare.add_argument("--retries", type=int, default=2)
     ingest_akshare.add_argument("--retry-wait-seconds", type=float, default=1.0)
+    ingest_akshare.add_argument("--request-interval-seconds", type=float, default=0.0)
     ingest_akshare.add_argument("--incremental", action="store_true")
     ingest_akshare.add_argument("--run-log", type=Path, default=Path("data/reports/ingestion_runs.parquet"))
+
+    dimensions = subparsers.add_parser("dimensions")
+    add_common(dimensions)
+    dimensions.add_argument("--start-date", required=True)
+    dimensions.add_argument("--end-date", required=True)
+
+    hs300_symbols = subparsers.add_parser("build-hs300-symbols")
+    hs300_symbols.add_argument("--output", type=Path, default=Path("configs/symbols.csv"))
+    hs300_symbols.add_argument("--include-st", action="store_true")
 
     quality = subparsers.add_parser("quality")
     add_common(quality)
@@ -183,6 +217,9 @@ def build_parser() -> argparse.ArgumentParser:
     backtest.add_argument("--top-quantile", type=float, default=0.1)
     backtest.add_argument("--rebalance-interval", type=int, default=20)
     backtest.add_argument("--transaction-cost", type=float, default=0.001)
+    backtest.add_argument("--commission-rate", type=float, default=0.0003)
+    backtest.add_argument("--slippage-rate", type=float, default=0.0005)
+    backtest.add_argument("--stamp-tax-rate", type=float, default=0.0005)
 
     load_clickhouse = subparsers.add_parser("load-clickhouse")
     add_common(load_clickhouse)
@@ -202,6 +239,9 @@ def build_parser() -> argparse.ArgumentParser:
     run_all.add_argument("--top-quantile", type=float, default=0.1)
     run_all.add_argument("--rebalance-interval", type=int, default=20)
     run_all.add_argument("--transaction-cost", type=float, default=0.001)
+    run_all.add_argument("--commission-rate", type=float, default=0.0003)
+    run_all.add_argument("--slippage-rate", type=float, default=0.0005)
+    run_all.add_argument("--stamp-tax-rate", type=float, default=0.0005)
     run_all.add_argument("--min-rows-per-date", type=int, default=1)
     run_all.add_argument("--abnormal-return-threshold", type=float, default=0.2)
     return parser
@@ -225,9 +265,14 @@ def main(argv: list[str] | None = None) -> int:
             args.adjust,
             args.retries,
             args.retry_wait_seconds,
+            args.request_interval_seconds,
             args.incremental,
             args.run_log,
         )
+    elif args.command == "dimensions":
+        run_dimensions(args.output_dir, args.start_date, args.end_date)
+    elif args.command == "build-hs300-symbols":
+        run_build_hs300_symbols(args.output, filter_st=not args.include_st)
     elif args.command == "quality":
         run_quality(args.output_dir, args.min_rows_per_date, args.abnormal_return_threshold)
     elif args.command == "factors":
@@ -241,6 +286,9 @@ def main(argv: list[str] | None = None) -> int:
             args.top_quantile,
             args.rebalance_interval,
             args.transaction_cost,
+            args.commission_rate,
+            args.slippage_rate,
+            args.stamp_tax_rate,
         )
     elif args.command == "load-clickhouse":
         run_load_clickhouse(
@@ -263,6 +311,9 @@ def main(argv: list[str] | None = None) -> int:
             args.top_quantile,
             args.rebalance_interval,
             args.transaction_cost,
+            args.commission_rate,
+            args.slippage_rate,
+            args.stamp_tax_rate,
         )
     return 0
 

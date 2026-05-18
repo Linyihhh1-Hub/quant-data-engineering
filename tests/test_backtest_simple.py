@@ -68,10 +68,11 @@ def test_run_simple_backtest_returns_daily_series_and_metrics():
         "daily_return",
         "benchmark_return",
         "drawdown",
+        "positions_count",
     ]
     assert daily_result.loc[0, "portfolio_value"] == 1.0
     assert daily_result.loc[0, "benchmark_value"] == 1.0
-    assert {"total_return", "annualized_return", "max_drawdown", "sharpe", "turnover"} == set(metrics)
+    assert {"total_return", "annualized_return", "max_drawdown", "sharpe", "turnover", "total_cost"} == set(metrics)
 
 
 def test_run_simple_backtest_applies_selected_portfolio_returns():
@@ -88,3 +89,65 @@ def test_run_simple_backtest_applies_selected_portfolio_returns():
     assert round(daily_result.loc[1, "daily_return"], 6) == round(expected_first_return, 6)
     assert metrics["max_drawdown"] <= 0
     assert metrics["turnover"] >= 0
+
+
+def test_run_simple_backtest_executes_factor_signal_on_next_trade_day():
+    daily = pd.DataFrame(
+        [
+            {"trade_date": "2024-01-01", "symbol": "000001.SZ", "close": 10.0},
+            {"trade_date": "2024-01-02", "symbol": "000001.SZ", "close": 11.0},
+            {"trade_date": "2024-01-03", "symbol": "000001.SZ", "close": 12.0},
+        ]
+    )
+    factors = pd.DataFrame(
+        [{"trade_date": "2024-01-01", "symbol": "000001.SZ", "test_factor": 1.0}]
+    )
+
+    result, _ = run_simple_backtest(
+        factors,
+        daily,
+        "test_factor",
+        top_quantile=1.0,
+        rebalance_interval=1,
+        transaction_cost=0.0,
+    )
+
+    assert result.loc[0, "positions_count"] == 0
+    assert result.loc[1, "positions_count"] == 1
+
+
+def test_run_simple_backtest_respects_limit_and_fee_constraints():
+    daily = pd.DataFrame(
+        [
+            {"trade_date": "2024-01-01", "symbol": "AAA", "close": 10.0, "is_limit_up": False, "is_limit_down": False, "is_suspended": False},
+            {"trade_date": "2024-01-01", "symbol": "BBB", "close": 10.0, "is_limit_up": False, "is_limit_down": False, "is_suspended": False},
+            {"trade_date": "2024-01-02", "symbol": "AAA", "close": 11.0, "is_limit_up": True, "is_limit_down": False, "is_suspended": False},
+            {"trade_date": "2024-01-02", "symbol": "BBB", "close": 9.0, "is_limit_up": False, "is_limit_down": True, "is_suspended": False},
+            {"trade_date": "2024-01-03", "symbol": "AAA", "close": 12.0, "is_limit_up": False, "is_limit_down": False, "is_suspended": False},
+            {"trade_date": "2024-01-03", "symbol": "BBB", "close": 8.0, "is_limit_up": False, "is_limit_down": False, "is_suspended": False},
+        ]
+    )
+    factors = pd.DataFrame(
+        [
+            {"trade_date": "2024-01-01", "symbol": "AAA", "test_factor": 2.0},
+            {"trade_date": "2024-01-01", "symbol": "BBB", "test_factor": 1.0},
+            {"trade_date": "2024-01-02", "symbol": "AAA", "test_factor": 1.0},
+            {"trade_date": "2024-01-02", "symbol": "BBB", "test_factor": 2.0},
+        ]
+    )
+
+    result, metrics = run_simple_backtest(
+        factors,
+        daily,
+        "test_factor",
+        top_quantile=0.5,
+        rebalance_interval=1,
+        transaction_cost=0.0,
+        commission_rate=0.001,
+        slippage_rate=0.001,
+        stamp_tax_rate=0.001,
+    )
+
+    assert result.loc[1, "positions_count"] == 0
+    assert result.loc[2, "positions_count"] == 1
+    assert metrics["total_cost"] > 0

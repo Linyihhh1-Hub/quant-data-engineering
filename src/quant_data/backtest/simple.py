@@ -32,7 +32,47 @@ def compute_daily_returns(daily_bars: pd.DataFrame) -> pd.DataFrame:
     result["trade_date"] = pd.to_datetime(result["trade_date"]).astype("datetime64[ns]")
     result = result.sort_values(["symbol", "trade_date"]).reset_index(drop=True)
     result["daily_symbol_return"] = result.groupby("symbol")["close"].pct_change()
+    for column in ["is_suspended", "is_limit_up", "is_limit_down"]:
+        if column not in result.columns:
+            result[column] = False
     return result
+
+
+def _tradability_snapshot(returns: pd.DataFrame, trade_date: pd.Timestamp) -> dict[str, dict[str, bool]]:
+    day = returns[returns["trade_date"] == trade_date]
+    return {
+        row["symbol"]: {
+            "is_suspended": bool(row["is_suspended"]),
+            "is_limit_up": bool(row["is_limit_up"]),
+            "is_limit_down": bool(row["is_limit_down"]),
+        }
+        for _, row in day.iterrows()
+    }
+
+
+def _apply_trade_constraints(
+    current_positions: set[str],
+    target_positions: set[str],
+    tradability: dict[str, dict[str, bool]],
+) -> set[str]:
+    sell_symbols = current_positions - target_positions
+    buy_symbols = target_positions - current_positions
+    keep_symbols = current_positions & target_positions
+
+    executable_sells = {
+        symbol
+        for symbol in sell_symbols
+        if not tradability.get(symbol, {}).get("is_suspended", False)
+        and not tradability.get(symbol, {}).get("is_limit_down", False)
+    }
+    executable_buys = {
+        symbol
+        for symbol in buy_symbols
+        if not tradability.get(symbol, {}).get("is_suspended", False)
+        and not tradability.get(symbol, {}).get("is_limit_up", False)
+    }
+    blocked_sells = sell_symbols - executable_sells
+    return keep_symbols | blocked_sells | executable_buys
 
 
 def _portfolio_return_for_date(
@@ -83,31 +123,45 @@ def run_simple_backtest(
     top_quantile: float = 0.1,
     rebalance_interval: int = 20,
     transaction_cost: float = 0.001,
+    commission_rate: float = 0.0,
+    slippage_rate: float = 0.0,
+    stamp_tax_rate: float = 0.0,
 ) -> tuple[pd.DataFrame, dict[str, float]]:
     if rebalance_interval < 1:
         raise ValueError("rebalance_interval must be >= 1")
     if transaction_cost < 0:
         raise ValueError("transaction_cost must be >= 0")
+    if commission_rate < 0 or slippage_rate < 0 or stamp_tax_rate < 0:
+        raise ValueError("commission_rate, slippage_rate and stamp_tax_rate must be >= 0")
 
     factor_frame = factors.copy()
     factor_frame["trade_date"] = pd.to_datetime(factor_frame["trade_date"]).astype("datetime64[ns]")
     returns = compute_daily_returns(daily_bars)
     trade_dates = sorted(returns["trade_date"].unique())
     factor_dates = sorted(factor_frame["trade_date"].unique())
-    rebalance_dates = set(factor_dates[::rebalance_interval])
+    execution_dates = {
+        pd.Timestamp(factor_date): pd.Timestamp(trade_dates[index + 1])
+        for index, factor_date in enumerate(trade_dates[:-1])
+        if pd.Timestamp(factor_date) in set(factor_dates[::rebalance_interval])
+    }
+    rebalance_dates = set(execution_dates.values())
 
     portfolio_value = 1.0
     benchmark_value = 1.0
     current_positions: set[str] = set()
     total_turnover = 0.0
+    total_cost = 0.0
     rows = []
 
     for index, trade_date in enumerate(trade_dates):
         timestamp = pd.Timestamp(trade_date)
 
         if timestamp in rebalance_dates:
-            snapshot = factor_frame[factor_frame["trade_date"] == timestamp]
-            new_positions = set(select_top_symbols(snapshot, factor_name, top_quantile))
+            signal_date = next(signal for signal, execution in execution_dates.items() if execution == timestamp)
+            snapshot = factor_frame[factor_frame["trade_date"] == signal_date]
+            target_positions = set(select_top_symbols(snapshot, factor_name, top_quantile))
+            tradability = _tradability_snapshot(returns, timestamp)
+            new_positions = _apply_trade_constraints(current_positions, target_positions, tradability)
 
             # 调仓成本按权重变化粗略估算：第一次建仓不扣成本，后续换仓按 turnover 扣。
             if current_positions:
@@ -115,8 +169,17 @@ def run_simple_backtest(
                 new_weight = {symbol: 1 / len(new_positions) for symbol in new_positions}
                 all_symbols = set(old_weight) | set(new_weight)
                 turnover = sum(abs(new_weight.get(symbol, 0.0) - old_weight.get(symbol, 0.0)) for symbol in all_symbols)
-                portfolio_value *= 1 - turnover * transaction_cost
+                sell_turnover = sum(max(old_weight.get(symbol, 0.0) - new_weight.get(symbol, 0.0), 0.0) for symbol in all_symbols)
+                cost_rate = turnover * (transaction_cost + commission_rate + slippage_rate) + sell_turnover * stamp_tax_rate
+                portfolio_value *= 1 - cost_rate
                 total_turnover += turnover
+                total_cost += cost_rate
+            elif new_positions:
+                turnover = 1.0
+                cost_rate = turnover * (transaction_cost + commission_rate + slippage_rate)
+                portfolio_value *= 1 - cost_rate
+                total_turnover += turnover
+                total_cost += cost_rate
             current_positions = new_positions
 
         portfolio_return = 0.0 if index == 0 else _portfolio_return_for_date(returns, timestamp, current_positions)
@@ -134,6 +197,7 @@ def run_simple_backtest(
                 "benchmark_value": benchmark_value,
                 "daily_return": portfolio_return,
                 "benchmark_return": benchmark_return,
+                "positions_count": len(current_positions),
             }
         )
 
@@ -147,6 +211,7 @@ def run_simple_backtest(
         "max_drawdown": float(result["drawdown"].min()) if not result.empty else 0.0,
         "sharpe": _sharpe(result["daily_return"]),
         "turnover": float(total_turnover),
+        "total_cost": float(total_cost),
     }
     return result[
         [
@@ -156,5 +221,6 @@ def run_simple_backtest(
             "daily_return",
             "benchmark_return",
             "drawdown",
+            "positions_count",
         ]
     ], metrics

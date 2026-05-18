@@ -37,6 +37,20 @@ def test_write_dataframe_creates_table_and_inserts_rows():
     assert client.inserts[0][0] == "dwd_stock_daily"
 
 
+def test_write_dataframe_uses_nullable_type_for_missing_datetime():
+    client = FakeClient()
+    frame = pd.DataFrame(
+        {
+            "trade_date": [pd.Timestamp("2024-01-02")],
+            "pre_trade_date": [pd.NaT],
+        }
+    )
+
+    write_dataframe(client, "dim_trade_calendar", frame)
+
+    assert "`pre_trade_date` Nullable(DateTime)" in client.commands[1]
+
+
 def test_load_pipeline_outputs_loads_expected_tables(tmp_path):
     client = FakeClient()
     dwd = pd.DataFrame({"trade_date": [pd.Timestamp("2024-01-02")], "symbol": ["000001.SZ"]})
@@ -84,10 +98,13 @@ def test_load_pipeline_outputs_loads_ops_tables_when_reports_exist(tmp_path):
         }
     )
     quality = pd.DataFrame({"rule_name": ["primary_key_unique"], "status": ["PASS"], "failed_count": [0], "failed_sample": [""]})
+    calendar = pd.DataFrame({"trade_date": [pd.Timestamp("2024-01-02")], "is_open": [True]})
+    stock_basic = pd.DataFrame({"symbol": ["000001.SZ"], "raw_symbol": ["000001"], "name": ["平安银行"], "exchange": ["SZ"], "is_st": [False]})
 
     (tmp_path / "dwd").mkdir()
     (tmp_path / "ads").mkdir()
     (tmp_path / "reports").mkdir()
+    (tmp_path / "dim").mkdir()
     dwd.to_parquet(tmp_path / "dwd" / "stock_daily.parquet", index=False)
     factors.to_parquet(tmp_path / "ads" / "factor_wide_daily.parquet", index=False)
     eval_report.to_parquet(tmp_path / "ads" / "factor_eval_momentum_20d.parquet", index=False)
@@ -95,13 +112,19 @@ def test_load_pipeline_outputs_loads_ops_tables_when_reports_exist(tmp_path):
     ingestion_report.to_parquet(tmp_path / "reports" / "ingestion_report.parquet", index=False)
     ingestion_runs.to_parquet(tmp_path / "reports" / "ingestion_runs.parquet", index=False)
     quality.to_parquet(tmp_path / "reports" / "data_quality_report.parquet", index=False)
+    calendar.to_parquet(tmp_path / "dim" / "trade_calendar.parquet", index=False)
+    stock_basic.to_parquet(tmp_path / "dim" / "stock_basic.parquet", index=False)
 
     loaded = load_pipeline_outputs(client, tmp_path, factor_name="momentum_20d")
 
+    assert loaded["dim_trade_calendar"] == 1
+    assert loaded["dim_stock_basic"] == 1
     assert loaded["ops_ingestion_report"] == 1
     assert loaded["ops_ingestion_runs"] == 1
     assert loaded["ops_data_quality_report"] == 1
-    assert [table for table, _ in client.inserts][-3:] == [
+    assert [table for table, _ in client.inserts][-5:] == [
+        "dim_trade_calendar",
+        "dim_stock_basic",
         "ops_ingestion_report",
         "ops_ingestion_runs",
         "ops_data_quality_report",

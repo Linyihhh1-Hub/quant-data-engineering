@@ -6,12 +6,18 @@ param(
     [string]$EndDate,
 
     [string]$SymbolsFile = "configs/symbols.csv",
+    [bool]$BuildHs300Symbols = $false,
     [string]$FactorName = "momentum_20d",
     [int]$Groups = 5,
     [int]$MinRowsPerDate = 20,
     [double]$AbnormalReturnThreshold = 0.25,
+    [double]$TransactionCost = 0.001,
+    [double]$CommissionRate = 0.0003,
+    [double]$SlippageRate = 0.0005,
+    [double]$StampTaxRate = 0.0005,
     [int]$Retries = 3,
     [double]$RetryWaitSeconds = 2,
+    [double]$RequestIntervalSeconds = 0.5,
     [bool]$Incremental = $true,
     [bool]$LoadClickHouse = $true,
     [string]$EnvFile = ".env",
@@ -60,7 +66,20 @@ $OdsPath = "data/ods/stock_daily.parquet"
 $IngestionReportPath = "data/reports/ingestion_report.parquet"
 $IngestionRunLogPath = "data/reports/ingestion_runs.parquet"
 
-Write-Host "Step 1/4 Ingest A-share daily data"
+if ($BuildHs300Symbols) {
+    Write-Host "Step 1/5 Build CSI 300 symbol pool"
+    & $Python -m quant_data.cli build-hs300-symbols --output $SymbolsFile
+} else {
+    Write-Host "Step 1/5 Use existing symbol pool: $SymbolsFile"
+}
+
+Write-Host "Step 2/5 Build dimension tables"
+& $Python -m quant_data.cli dimensions `
+    --start-date $StartDate `
+    --end-date $EndDate `
+    --output-dir data
+
+Write-Host "Step 3/5 Ingest A-share daily data"
 $IngestArgs = @(
     "-m", "quant_data.cli", "ingest-akshare",
     "--symbols-file", $SymbolsFile,
@@ -71,6 +90,7 @@ $IngestArgs = @(
     "--report", $IngestionReportPath,
     "--retries", "$Retries",
     "--retry-wait-seconds", "$RetryWaitSeconds",
+    "--request-interval-seconds", "$RequestIntervalSeconds",
     "--run-log", $IngestionRunLogPath
 )
 if ($Incremental) {
@@ -78,17 +98,21 @@ if ($Incremental) {
 }
 & $Python @IngestArgs
 
-Write-Host "Step 2/4 Run local data pipeline"
+Write-Host "Step 4/5 Run local data pipeline"
 & $Python -m quant_data.cli run-all `
     --input $OdsPath `
     --output-dir data `
     --factor-name $FactorName `
     --groups $Groups `
     --min-rows-per-date $MinRowsPerDate `
-    --abnormal-return-threshold $AbnormalReturnThreshold
+    --abnormal-return-threshold $AbnormalReturnThreshold `
+    --transaction-cost $TransactionCost `
+    --commission-rate $CommissionRate `
+    --slippage-rate $SlippageRate `
+    --stamp-tax-rate $StampTaxRate
 
 if ($LoadClickHouse -and $ClickHousePassword) {
-    Write-Host "Step 3/4 Load results into ClickHouse"
+    Write-Host "Step 5/5 Load results into ClickHouse"
     & $Python -m quant_data.cli load-clickhouse `
         --output-dir data `
         --factor-name $FactorName `
@@ -98,12 +122,12 @@ if ($LoadClickHouse -and $ClickHousePassword) {
         --password $ClickHousePassword `
         --database $ClickHouseDatabase
 } elseif ($LoadClickHouse) {
-    Write-Warning "Step 3/4 skipped ClickHouse load because ClickHousePassword or CLICKHOUSE_PASSWORD is not set."
+    Write-Warning "Step 5/5 skipped ClickHouse load because ClickHousePassword or CLICKHOUSE_PASSWORD is not set."
 } else {
-    Write-Host "Step 3/4 Skip ClickHouse load"
+    Write-Host "Step 5/5 Skip ClickHouse load"
 }
 
-Write-Host "Step 4/4 Print run summary"
+Write-Host "Print run summary"
 $env:PIPELINE_FACTOR_NAME = $FactorName
 $SummaryCode = @'
 import json
@@ -129,6 +153,8 @@ if Path("data/reports/ingestion_report.parquet").exists():
     print("ingestion_status_counts:", report["status"].value_counts().to_dict())
 
 print_frame_status("ods_stock_daily", "data/ods/stock_daily.parquet", "symbol")
+print_frame_status("dim_trade_calendar", "data/dim/trade_calendar.parquet")
+print_frame_status("dim_stock_basic", "data/dim/stock_basic.parquet", "symbol")
 print_frame_status("dwd_stock_daily", "data/dwd/stock_daily.parquet", "symbol")
 print_frame_status("factor_wide_daily", "data/ads/factor_wide_daily.parquet", "symbol")
 factor_name = os.environ.get("PIPELINE_FACTOR_NAME", "momentum_20d")

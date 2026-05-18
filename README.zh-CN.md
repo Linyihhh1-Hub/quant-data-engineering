@@ -37,6 +37,24 @@ argparse CLI
 
 这个命令会按 `configs/symbols.csv` 股票池执行增量采集，然后自动完成清洗、质量检查、因子计算、因子评估、回测和 ClickHouse 写入。
 
+如果要把股票池扩展为沪深 300 成分股，可以先生成股票池：
+
+```powershell
+.\.venv\Scripts\python.exe -m quant_data.cli build-hs300-symbols `
+  --output configs/symbols.csv
+```
+
+也可以在一键脚本里自动生成：
+
+```powershell
+.\scripts\run_daily_pipeline.ps1 `
+  -StartDate 20240101 `
+  -EndDate 20241231 `
+  -BuildHs300Symbols $true
+```
+
+脚本会同步生成 `dim_trade_calendar` 和 `dim_stock_basic` 两张维表。当前回测已加入防未来函数处理：当天因子信号只能在下一交易日执行，并支持停牌、涨停不能买入、跌停不能卖出、佣金、滑点和印花税等约束。
+
 ## 当前功能
 
 ### 1\. 日线数据清洗
@@ -248,10 +266,12 @@ data/ads/backtest\_metrics\_<factor\_name>.json
   --database quant_data
 ```
 
-导入后会创建 7 张表：
+导入后会创建 9 张表：
 
 ```text
 dwd_stock_daily
+dim_trade_calendar
+dim_stock_basic
 ads_factor_wide_daily
 ads_factor_eval
 ads_backtest_daily

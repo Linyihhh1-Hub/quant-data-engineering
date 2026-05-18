@@ -59,7 +59,7 @@ def test_cli_run_all_writes_pipeline_outputs(tmp_path):
     metrics_path = tmp_path / "ads" / "backtest_metrics_momentum_20d.json"
     assert metrics_path.exists()
     metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
-    assert {"total_return", "annualized_return", "max_drawdown", "sharpe", "turnover"} == set(metrics)
+    assert {"total_return", "annualized_return", "max_drawdown", "sharpe", "turnover", "total_cost"} == set(metrics)
 
 
 def test_cli_ingest_akshare_writes_ods_file(monkeypatch, tmp_path):
@@ -220,3 +220,46 @@ def test_cli_load_clickhouse_uses_pipeline_outputs(monkeypatch, tmp_path):
         "data_dir": str(tmp_path),
         "factor_name": "momentum_20d",
     }
+
+
+def test_cli_dimensions_writes_dim_files(monkeypatch, tmp_path):
+    calls = {}
+
+    def fake_write_trade_calendar(start_date: str, end_date: str, output_path):
+        calls["calendar"] = (start_date, end_date, str(output_path))
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame({"trade_date": [pd.Timestamp("2024-01-02")]}).to_parquet(output_path, index=False)
+        return output_path
+
+    def fake_write_stock_basic(output_path):
+        calls["stock_basic"] = str(output_path)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame({"symbol": ["000001.SZ"]}).to_parquet(output_path, index=False)
+        return output_path
+
+    monkeypatch.setattr("quant_data.cli.write_trade_calendar", fake_write_trade_calendar)
+    monkeypatch.setattr("quant_data.cli.write_stock_basic", fake_write_stock_basic)
+
+    exit_code = main(["dimensions", "--start-date", "20240101", "--end-date", "20241231", "--output-dir", str(tmp_path)])
+
+    assert exit_code == 0
+    assert calls["calendar"] == ("20240101", "20241231", str(tmp_path / "dim" / "trade_calendar.parquet"))
+    assert calls["stock_basic"] == str(tmp_path / "dim" / "stock_basic.parquet")
+
+
+def test_cli_build_hs300_symbols_writes_config(monkeypatch, tmp_path):
+    calls = {}
+
+    def fake_write_hs300_symbol_pool(output_path, filter_st: bool):
+        calls["output"] = str(output_path)
+        calls["filter_st"] = filter_st
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame({"symbol": ["000001"], "name": ["平安银行"]}).to_csv(output_path, index=False)
+        return output_path
+
+    monkeypatch.setattr("quant_data.cli.write_hs300_symbol_pool", fake_write_hs300_symbol_pool)
+
+    exit_code = main(["build-hs300-symbols", "--output", str(tmp_path / "symbols.csv")])
+
+    assert exit_code == 0
+    assert calls == {"output": str(tmp_path / "symbols.csv"), "filter_st": True}

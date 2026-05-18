@@ -26,3 +26,19 @@ def test_clean_daily_bars_computes_return_per_symbol(raw_daily_frame):
 
     assert pd.isna(pingan.loc[0, "return_1d"])
     assert round(pingan.loc[1, "return_1d"], 6) == 0.05
+
+
+def test_clean_daily_bars_adds_trading_constraint_flags():
+    frame = pd.DataFrame(
+        [
+            {"trade_date": "2024-01-01", "symbol": "000001", "open": 10, "high": 10, "low": 10, "close": 10, "volume": 100, "amount": 1000},
+            {"trade_date": "2024-01-02", "symbol": "000001", "open": 11, "high": 11, "low": 11, "close": 11, "volume": 100, "amount": 1100},
+            {"trade_date": "2024-01-03", "symbol": "000001", "open": 9.9, "high": 9.9, "low": 9.9, "close": 9.9, "volume": 0, "amount": 0},
+        ]
+    )
+
+    result = clean_daily_bars(frame).reset_index(drop=True)
+
+    assert result.loc[1, "is_limit_up"] == True
+    assert result.loc[2, "is_limit_down"] == True
+    assert result.loc[2, "is_suspended"] == True

@@ -113,6 +113,22 @@ It also reads a local ignored `.env` file when present:
 CLICKHOUSE_PASSWORD=<your-clickhouse-password>
 ```
 
+To switch the universe to CSI 300 constituents:
+
+```powershell
+.\.venv\Scripts\python.exe -m quant_data.cli build-hs300-symbols `
+  --output configs/symbols.csv
+```
+
+Or let the daily script rebuild the CSI 300 universe:
+
+```powershell
+.\scripts\run_daily_pipeline.ps1 `
+  -StartDate 20240101 `
+  -EndDate 20241231 `
+  -BuildHs300Symbols $true
+```
+
 Fetch real A-share daily data with AkShare:
 
 ```powershell
@@ -192,6 +208,8 @@ Load generated Parquet outputs into local ClickHouse:
 Created tables:
 
 ```text
+dim_trade_calendar
+dim_stock_basic
 dwd_stock_daily
 ads_factor_wide_daily
 ads_factor_eval

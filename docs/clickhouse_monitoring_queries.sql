@@ -2,7 +2,11 @@
 -- Run these queries in DBeaver or clickhouse-client after the daily pipeline finishes.
 
 -- 1. Check loaded table row counts.
-SELECT 'dwd_stock_daily' AS table_name, count() AS row_count FROM dwd_stock_daily
+SELECT 'dim_trade_calendar' AS table_name, count() AS row_count FROM dim_trade_calendar
+UNION ALL
+SELECT 'dim_stock_basic', count() FROM dim_stock_basic
+UNION ALL
+SELECT 'dwd_stock_daily', count() FROM dwd_stock_daily
 UNION ALL
 SELECT 'ads_factor_wide_daily', count() FROM ads_factor_wide_daily
 UNION ALL
@@ -22,6 +26,12 @@ SELECT
     uniqExact(symbol) AS symbol_count,
     count() AS row_count
 FROM dwd_stock_daily;
+
+-- 2.1 Check ST stock count in the stock basic dimension.
+SELECT
+    count() AS stock_count,
+    countIf(is_st = 1) AS st_count
+FROM dim_stock_basic;
 
 -- 3. Check row count by stock.
 SELECT

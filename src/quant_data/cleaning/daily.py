@@ -35,5 +35,12 @@ def clean_daily_bars(frame: pd.DataFrame) -> pd.DataFrame:
     result = result.drop_duplicates(subset=["trade_date", "symbol"], keep="last")
     result = result.sort_values(["symbol", "trade_date"]).reset_index(drop=True)
     # 收益率必须按股票分组计算，避免不同股票之间发生收益串线。
-    result["return_1d"] = result.groupby("symbol")["close"].pct_change()
+    grouped = result.groupby("symbol")
+    result["return_1d"] = grouped["close"].pct_change()
+    prev_close = grouped["close"].shift(1)
+    limit_rate = result["symbol"].map(lambda symbol: 0.2 if str(symbol).startswith(("300", "301", "688", "689")) else 0.1)
+    result["is_suspended"] = result["volume"].fillna(0) <= 0
+    # 第一版涨跌停标识基于复权收盘价近似判断，用于回测交易约束；后续可替换为交易所精确涨跌停价。
+    result["is_limit_up"] = (prev_close.notna()) & (result["close"] >= prev_close * (1 + limit_rate) * 0.999)
+    result["is_limit_down"] = (prev_close.notna()) & (result["close"] <= prev_close * (1 - limit_rate) * 1.001)
     return result
