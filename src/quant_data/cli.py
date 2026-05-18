@@ -40,6 +40,8 @@ def run_ingest_akshare(
     output_path: Path,
     report_path: Path,
     adjust: str,
+    retries: int,
+    retry_wait_seconds: float,
 ) -> tuple[Path, Path]:
     symbol_list: list[str] = []
     if symbols:
@@ -58,6 +60,8 @@ def run_ingest_akshare(
         output_path=output_path,
         report_path=report_path,
         adjust=adjust,
+        retries=retries,
+        retry_wait_seconds=retry_wait_seconds,
     )
 
 
@@ -150,6 +154,8 @@ def build_parser() -> argparse.ArgumentParser:
     ingest_akshare.add_argument("--adjust", default="qfq")
     ingest_akshare.add_argument("--output", type=Path, default=Path("data/ods/stock_daily.parquet"))
     ingest_akshare.add_argument("--report", type=Path, default=Path("data/reports/ingestion_report.parquet"))
+    ingest_akshare.add_argument("--retries", type=int, default=2)
+    ingest_akshare.add_argument("--retry-wait-seconds", type=float, default=1.0)
 
     quality = subparsers.add_parser("quality")
     add_common(quality)
@@ -211,6 +217,8 @@ def main(argv: list[str] | None = None) -> int:
             args.output,
             args.report,
             args.adjust,
+            args.retries,
+            args.retry_wait_seconds,
         )
     elif args.command == "quality":
         run_quality(args.output_dir, args.min_rows_per_date, args.abnormal_return_threshold)

@@ -1,5 +1,6 @@
 from importlib import import_module
 from pathlib import Path
+from time import sleep
 from typing import Iterable
 
 import pandas as pd
@@ -64,15 +65,33 @@ def ingest_stock_daily(
     output_path: str | Path,
     report_path: str | Path,
     adjust: str = "qfq",
+    retries: int = 2,
+    retry_wait_seconds: float = 1.0,
 ) -> tuple[Path, Path]:
+    if retries < 0:
+        raise ValueError("retries must be >= 0")
+    if retry_wait_seconds < 0:
+        raise ValueError("retry_wait_seconds must be >= 0")
+
     frames = []
     report_rows = []
     for symbol in symbols:
         normalized_symbol = symbol.strip()
         if not normalized_symbol:
             continue
+        last_error: Exception | None = None
         try:
-            frame = fetch_stock_daily(normalized_symbol, start_date, end_date, adjust=adjust)
+            # 外部行情接口偶发网络失败时，按单只股票重试，避免整批采集被短暂抖动击穿。
+            for attempt in range(retries + 1):
+                try:
+                    frame = fetch_stock_daily(normalized_symbol, start_date, end_date, adjust=adjust)
+                    break
+                except Exception as error:  # noqa: BLE001 - 这里需要保留原始异常写入采集报告。
+                    last_error = error
+                    if attempt < retries:
+                        sleep(retry_wait_seconds)
+            else:
+                raise last_error or RuntimeError("Unknown ingestion error")
         except Exception as error:  # noqa: BLE001 - 采集阶段需要记录单票失败并继续其他股票。
             report_rows.append(
                 {

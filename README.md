@@ -118,7 +118,9 @@ You can also manage the universe with a CSV stock pool:
   --end-date 20241231 `
   --adjust qfq `
   --output data/ods/stock_daily.parquet `
-  --report data/reports/ingestion_report.parquet
+  --report data/reports/ingestion_report.parquet `
+  --retries 3 `
+  --retry-wait-seconds 2
 ```
 
 The stock pool file must contain a `symbol` column. The ingestion report records per-symbol status:
@@ -148,6 +150,8 @@ data/ads/backtest_metrics_<factor_name>.json
 ```
 
 Chinese documentation: [README.zh-CN.md](README.zh-CN.md)
+
+Data dictionary in Chinese: [docs/data_dictionary.zh-CN.md](docs/data_dictionary.zh-CN.md)
 
 ## ClickHouse Load
 

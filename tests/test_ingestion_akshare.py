@@ -92,3 +92,46 @@ def test_ingest_stock_daily_writes_successful_symbols_and_skips_failures(monkeyp
     assert report["status"].tolist() == ["SUCCESS", "FAILED"]
     assert report.loc[0, "row_count"] == 1
     assert "failed: 600000" in report.loc[1, "message"]
+
+
+def test_ingest_stock_daily_retries_transient_symbol_failure(monkeypatch, tmp_path):
+    fake = types.ModuleType("akshare")
+    attempts = {"000001": 0}
+
+    def stock_zh_a_hist(symbol: str, period: str, start_date: str, end_date: str, adjust: str):
+        attempts[symbol] += 1
+        if attempts[symbol] == 1:
+            raise RuntimeError("temporary network error")
+        return pd.DataFrame(
+            [
+                {
+                    "日期": "2024-01-02",
+                    "开盘": 10.0,
+                    "最高": 10.5,
+                    "最低": 9.8,
+                    "收盘": 10.2,
+                    "成交量": 1000,
+                    "成交额": 10200,
+                }
+            ]
+        )
+
+    fake.stock_zh_a_hist = stock_zh_a_hist
+    monkeypatch.setitem(sys.modules, "akshare", fake)
+
+    result_path, report_path = ingest_stock_daily(
+        symbols=["000001"],
+        start_date="20240101",
+        end_date="20240131",
+        output_path=tmp_path / "ods" / "stock_daily.parquet",
+        report_path=tmp_path / "reports" / "ingestion_report.parquet",
+        adjust="qfq",
+        retries=1,
+        retry_wait_seconds=0,
+    )
+
+    result = pd.read_parquet(result_path)
+    report = pd.read_parquet(report_path)
+    assert attempts["000001"] == 2
+    assert result["symbol"].tolist() == ["000001"]
+    assert report["status"].tolist() == ["SUCCESS"]
