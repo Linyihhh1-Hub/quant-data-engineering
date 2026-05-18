@@ -98,6 +98,16 @@ total_return, annualized_return, max_drawdown, sharpe, turnover
 
 ## CLI Pipeline
 
+Recommended daily run script:
+
+```powershell
+.\scripts\run_daily_pipeline.ps1 `
+  -StartDate 20240101 `
+  -EndDate 20241231
+```
+
+The script runs incremental ingestion, local pipeline stages, and ClickHouse load when `CLICKHOUSE_PASSWORD` or `-ClickHousePassword` is provided.
+
 Fetch real A-share daily data with AkShare:
 
 ```powershell

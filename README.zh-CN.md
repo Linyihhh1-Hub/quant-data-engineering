@@ -119,6 +119,20 @@ total\_return, annualized\_return, max\_drawdown, sharpe, turnover
 
 CLI 的作用是把各个模块串成可执行的数据流水线。每个命令读取上一阶段的 Parquet 输出，再写入下一阶段结果。
 
+日常运行推荐使用一键脚本：
+
+```powershell
+.\scripts\run_daily_pipeline.ps1 `
+  -StartDate 20240101 `
+  -EndDate 20241231
+```
+
+脚本会执行：增量采集、清洗、质量检查、因子计算、因子评估、回测，并在配置了 ClickHouse 密码时自动写入 ClickHouse。ClickHouse 密码建议通过环境变量传入：
+
+```powershell
+$env:CLICKHOUSE_PASSWORD = "<你的 ClickHouse 密码>"
+```
+
 接入 AkShare 真实 A 股日线数据：
 
 ```powershell
