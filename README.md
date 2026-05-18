@@ -107,6 +107,11 @@ Recommended daily run script:
 ```
 
 The script runs incremental ingestion, local pipeline stages, and ClickHouse load when `CLICKHOUSE_PASSWORD` or `-ClickHousePassword` is provided.
+It also reads a local ignored `.env` file when present:
+
+```text
+CLICKHOUSE_PASSWORD=<your-clickhouse-password>
+```
 
 Fetch real A-share daily data with AkShare:
 

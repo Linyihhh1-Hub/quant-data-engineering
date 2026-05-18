@@ -133,6 +133,14 @@ CLI 的作用是把各个模块串成可执行的数据流水线。每个命令�
 $env:CLICKHOUSE_PASSWORD = "<你的 ClickHouse 密码>"
 ```
 
+也可以在项目根目录创建本地 `.env` 文件，脚本会自动读取：
+
+```text
+CLICKHOUSE_PASSWORD=<你的 ClickHouse 密码>
+```
+
+`.env` 已加入 `.gitignore`，不会提交到 git。
+
 接入 AkShare 真实 A 股日线数据：
 
 ```powershell

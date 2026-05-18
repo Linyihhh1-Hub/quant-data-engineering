@@ -14,6 +14,7 @@ param(
     [double]$RetryWaitSeconds = 2,
     [bool]$Incremental = $true,
     [bool]$LoadClickHouse = $true,
+    [string]$EnvFile = ".env",
     [string]$ClickHouseHost = "127.0.0.1",
     [int]$ClickHousePort = 8123,
     [string]$ClickHouseUser = "default",
@@ -25,6 +26,20 @@ $ErrorActionPreference = "Stop"
 
 $ProjectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Set-Location $ProjectRoot
+
+$EnvPath = Join-Path $ProjectRoot $EnvFile
+if (-not $ClickHousePassword -and (Test-Path $EnvPath)) {
+    Get-Content $EnvPath | ForEach-Object {
+        $Line = $_.Trim()
+        if (-not $Line -or $Line.StartsWith("#") -or -not $Line.Contains("=")) {
+            return
+        }
+        $Key, $Value = $Line.Split("=", 2)
+        if ($Key.Trim() -eq "CLICKHOUSE_PASSWORD") {
+            $ClickHousePassword = $Value.Trim().Trim('"').Trim("'")
+        }
+    }
+}
 
 $Python = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
 if (-not (Test-Path $Python)) {
