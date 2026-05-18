@@ -2,6 +2,18 @@
 
 本文档说明当前量化数据工程项目中主要输入、输出文件的字段含义。项目采用本地 Parquet 文件作为中间数据存储，并可将部分结果写入 ClickHouse。
 
+## 日常运行命令
+
+推荐使用一键脚本运行完整流水线：
+
+```powershell
+.\scripts\run_daily_pipeline.ps1 `
+  -StartDate 20240101 `
+  -EndDate 20241231
+```
+
+该命令会读取 `configs/symbols.csv`，执行增量采集、清洗、质量检查、因子计算、因子评估、回测，并在本地 `.env` 中配置了 `CLICKHOUSE_PASSWORD` 时写入 ClickHouse。
+
 ## 股票池文件
 
 路径：`configs/symbols.csv`

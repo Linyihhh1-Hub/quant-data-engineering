@@ -25,6 +25,18 @@ pytest
 argparse CLI
 ```
 
+## 快速运行
+
+日常更新和完整重跑推荐直接执行一键脚本：
+
+```powershell
+.\scripts\run_daily_pipeline.ps1 `
+  -StartDate 20240101 `
+  -EndDate 20241231
+```
+
+这个命令会按 `configs/symbols.csv` 股票池执行增量采集，然后自动完成清洗、质量检查、因子计算、因子评估、回测和 ClickHouse 写入。
+
 ## 当前功能
 
 ### 1\. 日线数据清洗
