@@ -246,13 +246,16 @@ data/ads/backtest\_metrics\_<factor\_name>.json
   --database quant_data
 ```
 
-导入后会创建 4 张表：
+导入后会创建 7 张表：
 
 ```text
 dwd_stock_daily
 ads_factor_wide_daily
 ads_factor_eval
 ads_backtest_daily
+ops_ingestion_report
+ops_ingestion_runs
+ops_data_quality_report
 ```
 
 可以在数据库工具里执行：
@@ -262,6 +265,8 @@ SHOW TABLES;
 SELECT count() FROM dwd_stock_daily;
 SELECT * FROM ads_factor_wide_daily LIMIT 10;
 ```
+
+更多监控 SQL 见：[ClickHouse 监控 SQL](docs/clickhouse_monitoring_queries.sql)
 
 ## 测试
 

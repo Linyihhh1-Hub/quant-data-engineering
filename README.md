@@ -194,4 +194,9 @@ dwd_stock_daily
 ads_factor_wide_daily
 ads_factor_eval
 ads_backtest_daily
+ops_ingestion_report
+ops_ingestion_runs
+ops_data_quality_report
 ```
+
+Monitoring SQL: [docs/clickhouse_monitoring_queries.sql](docs/clickhouse_monitoring_queries.sql)

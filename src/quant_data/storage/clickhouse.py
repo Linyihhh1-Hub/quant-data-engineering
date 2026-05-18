@@ -53,17 +53,27 @@ def write_dataframe(client, table_name: str, frame: pd.DataFrame) -> int:
 
 def load_pipeline_outputs(client, data_dir: str | Path, factor_name: str) -> dict[str, int]:
     root = Path(data_dir)
-    table_files = {
+    required_table_files = {
         "dwd_stock_daily": root / "dwd" / "stock_daily.parquet",
         "ads_factor_wide_daily": root / "ads" / "factor_wide_daily.parquet",
         "ads_factor_eval": root / "ads" / f"factor_eval_{factor_name}.parquet",
         "ads_backtest_daily": root / "ads" / f"backtest_daily_{factor_name}.parquet",
     }
+    optional_table_files = {
+        "ops_ingestion_report": root / "reports" / "ingestion_report.parquet",
+        "ops_ingestion_runs": root / "reports" / "ingestion_runs.parquet",
+        "ops_data_quality_report": root / "reports" / "data_quality_report.parquet",
+    }
 
     loaded = {}
-    for table_name, path in table_files.items():
+    for table_name, path in required_table_files.items():
         if not path.exists():
             raise FileNotFoundError(f"Missing pipeline output: {path}")
         frame = pd.read_parquet(path)
         loaded[table_name] = write_dataframe(client, table_name, frame)
+    for table_name, path in optional_table_files.items():
+        if path.exists():
+            # OPS 表来自采集和质量检查报告，存在时同步入库，便于用 SQL 做任务审计和质量巡检。
+            frame = pd.read_parquet(path)
+            loaded[table_name] = write_dataframe(client, table_name, frame)
     return loaded

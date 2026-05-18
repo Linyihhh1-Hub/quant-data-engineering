@@ -65,3 +65,44 @@ def test_load_pipeline_outputs_loads_expected_tables(tmp_path):
         "ads_factor_eval",
         "ads_backtest_daily",
     ]
+
+
+def test_load_pipeline_outputs_loads_ops_tables_when_reports_exist(tmp_path):
+    client = FakeClient()
+    dwd = pd.DataFrame({"trade_date": [pd.Timestamp("2024-01-02")], "symbol": ["000001.SZ"]})
+    factors = pd.DataFrame({"trade_date": [pd.Timestamp("2024-01-02")], "symbol": ["000001.SZ"], "momentum_20d": [0.1]})
+    eval_report = pd.DataFrame({"trade_date": [pd.Timestamp("2024-01-02")], "factor_name": ["momentum_20d"], "ic": [0.5]})
+    backtest = pd.DataFrame({"trade_date": [pd.Timestamp("2024-01-02")], "portfolio_value": [1.0]})
+    ingestion_report = pd.DataFrame({"symbol": ["000001"], "status": ["SUCCESS"], "row_count": [1], "message": [""]})
+    ingestion_runs = pd.DataFrame(
+        {
+            "run_id": ["run-1"],
+            "started_at": [pd.Timestamp("2026-05-18", tz="UTC")],
+            "ended_at": [pd.Timestamp("2026-05-18 00:01:00", tz="UTC")],
+            "symbols_count": [1],
+            "success_count": [1],
+        }
+    )
+    quality = pd.DataFrame({"rule_name": ["primary_key_unique"], "status": ["PASS"], "failed_count": [0], "failed_sample": [""]})
+
+    (tmp_path / "dwd").mkdir()
+    (tmp_path / "ads").mkdir()
+    (tmp_path / "reports").mkdir()
+    dwd.to_parquet(tmp_path / "dwd" / "stock_daily.parquet", index=False)
+    factors.to_parquet(tmp_path / "ads" / "factor_wide_daily.parquet", index=False)
+    eval_report.to_parquet(tmp_path / "ads" / "factor_eval_momentum_20d.parquet", index=False)
+    backtest.to_parquet(tmp_path / "ads" / "backtest_daily_momentum_20d.parquet", index=False)
+    ingestion_report.to_parquet(tmp_path / "reports" / "ingestion_report.parquet", index=False)
+    ingestion_runs.to_parquet(tmp_path / "reports" / "ingestion_runs.parquet", index=False)
+    quality.to_parquet(tmp_path / "reports" / "data_quality_report.parquet", index=False)
+
+    loaded = load_pipeline_outputs(client, tmp_path, factor_name="momentum_20d")
+
+    assert loaded["ops_ingestion_report"] == 1
+    assert loaded["ops_ingestion_runs"] == 1
+    assert loaded["ops_data_quality_report"] == 1
+    assert [table for table, _ in client.inserts][-3:] == [
+        "ops_ingestion_report",
+        "ops_ingestion_runs",
+        "ops_data_quality_report",
+    ]

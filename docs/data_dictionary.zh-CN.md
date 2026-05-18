@@ -189,6 +189,7 @@
 ## ClickHouse 表
 
 当前加载命令会写入以下 4 张表：
+当前加载命令会写入以下业务表和 OPS 监控表：
 
 | 表名 | 对应本地文件 | 含义 |
 | --- | --- | --- |
@@ -196,5 +197,8 @@
 | `ads_factor_wide_daily` | `data/ads/factor_wide_daily.parquet` | 因子宽表 |
 | `ads_factor_eval` | `data/ads/factor_eval_<factor_name>.parquet` | 因子评估结果 |
 | `ads_backtest_daily` | `data/ads/backtest_daily_<factor_name>.parquet` | 回测日度结果 |
+| `ops_ingestion_report` | `data/reports/ingestion_report.parquet` | 单只股票采集状态 |
+| `ops_ingestion_runs` | `data/reports/ingestion_runs.parquet` | 每次采集任务运行日志 |
+| `ops_data_quality_report` | `data/reports/data_quality_report.parquet` | 数据质量检查结果 |
 
-采集报告和数据质量报告目前保存在本地 Parquet 文件中，后续可以继续扩展为 ClickHouse 表，便于做监控看板。
+常用监控 SQL 见：`docs/clickhouse_monitoring_queries.sql`。
