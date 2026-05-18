@@ -98,6 +98,36 @@ def _benchmark_return_for_date(returns: pd.DataFrame, trade_date: pd.Timestamp) 
     return float(day_returns.mean())
 
 
+def _sentiment_by_date(market_sentiment: pd.DataFrame | None) -> dict[pd.Timestamp, float]:
+    if market_sentiment is None or market_sentiment.empty:
+        return {}
+    required_columns = {"trade_date", "market_sentiment_score"}
+    missing_columns = required_columns - set(market_sentiment.columns)
+    if missing_columns:
+        missing = ", ".join(sorted(missing_columns))
+        raise ValueError(f"Missing market sentiment columns: {missing}")
+    frame = market_sentiment[["trade_date", "market_sentiment_score"]].copy()
+    frame["trade_date"] = pd.to_datetime(frame["trade_date"]).astype("datetime64[ns]")
+    return {
+        pd.Timestamp(row["trade_date"]): float(row["market_sentiment_score"])
+        for _, row in frame.dropna(subset=["market_sentiment_score"]).iterrows()
+    }
+
+
+def _target_exposure_for_signal(
+    sentiment_scores: dict[pd.Timestamp, float],
+    signal_date: pd.Timestamp,
+    sentiment_threshold: float | None,
+    weak_sentiment_exposure: float,
+    normal_exposure: float,
+) -> float:
+    if sentiment_threshold is None or signal_date not in sentiment_scores:
+        return normal_exposure
+    if sentiment_scores[signal_date] < sentiment_threshold:
+        return weak_sentiment_exposure
+    return normal_exposure
+
+
 def _max_drawdown(values: pd.Series) -> pd.Series:
     running_max = values.cummax()
     return values / running_max - 1
@@ -126,6 +156,10 @@ def run_simple_backtest(
     commission_rate: float = 0.0,
     slippage_rate: float = 0.0,
     stamp_tax_rate: float = 0.0,
+    market_sentiment: pd.DataFrame | None = None,
+    sentiment_threshold: float | None = None,
+    weak_sentiment_exposure: float = 0.5,
+    normal_exposure: float = 1.0,
 ) -> tuple[pd.DataFrame, dict[str, float]]:
     if rebalance_interval < 1:
         raise ValueError("rebalance_interval must be >= 1")
@@ -133,6 +167,10 @@ def run_simple_backtest(
         raise ValueError("transaction_cost must be >= 0")
     if commission_rate < 0 or slippage_rate < 0 or stamp_tax_rate < 0:
         raise ValueError("commission_rate, slippage_rate and stamp_tax_rate must be >= 0")
+    if not 0 <= weak_sentiment_exposure <= 1 or not 0 <= normal_exposure <= 1:
+        raise ValueError("weak_sentiment_exposure and normal_exposure must be in [0, 1]")
+    if weak_sentiment_exposure > normal_exposure:
+        raise ValueError("weak_sentiment_exposure must be less than or equal to normal_exposure")
 
     factor_frame = factors.copy()
     factor_frame["trade_date"] = pd.to_datetime(factor_frame["trade_date"]).astype("datetime64[ns]")
@@ -151,6 +189,8 @@ def run_simple_backtest(
     current_positions: set[str] = set()
     total_turnover = 0.0
     total_cost = 0.0
+    target_exposure = normal_exposure
+    sentiment_scores = _sentiment_by_date(market_sentiment)
     rows = []
 
     for index, trade_date in enumerate(trade_dates):
@@ -160,6 +200,14 @@ def run_simple_backtest(
             signal_date = next(signal for signal, execution in execution_dates.items() if execution == timestamp)
             snapshot = factor_frame[factor_frame["trade_date"] == signal_date]
             target_positions = set(select_top_symbols(snapshot, factor_name, top_quantile))
+            # 情绪择时只使用信号日已经产生的市场情绪分数，仓位调整在下一交易日执行。
+            target_exposure = _target_exposure_for_signal(
+                sentiment_scores,
+                signal_date,
+                sentiment_threshold,
+                weak_sentiment_exposure,
+                normal_exposure,
+            )
             tradability = _tradability_snapshot(returns, timestamp)
             new_positions = _apply_trade_constraints(current_positions, target_positions, tradability)
 
@@ -182,7 +230,8 @@ def run_simple_backtest(
                 total_cost += cost_rate
             current_positions = new_positions
 
-        portfolio_return = 0.0 if index == 0 else _portfolio_return_for_date(returns, timestamp, current_positions)
+        raw_portfolio_return = 0.0 if index == 0 else _portfolio_return_for_date(returns, timestamp, current_positions)
+        portfolio_return = raw_portfolio_return * target_exposure
         benchmark_return = 0.0 if index == 0 else _benchmark_return_for_date(returns, timestamp)
 
         # 净值从 1.0 开始，之后每天按组合收益滚动更新。
@@ -198,6 +247,7 @@ def run_simple_backtest(
                 "daily_return": portfolio_return,
                 "benchmark_return": benchmark_return,
                 "positions_count": len(current_positions),
+                "target_exposure": target_exposure,
             }
         )
 
@@ -212,6 +262,7 @@ def run_simple_backtest(
         "sharpe": _sharpe(result["daily_return"]),
         "turnover": float(total_turnover),
         "total_cost": float(total_cost),
+        "average_exposure": float(result["target_exposure"].mean()) if not result.empty else 0.0,
     }
     return result[
         [
@@ -222,5 +273,6 @@ def run_simple_backtest(
             "benchmark_return",
             "drawdown",
             "positions_count",
+            "target_exposure",
         ]
     ], metrics

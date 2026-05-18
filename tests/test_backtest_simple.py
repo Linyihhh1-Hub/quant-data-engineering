@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from quant_data.backtest.simple import (
     compute_daily_returns,
@@ -69,10 +70,19 @@ def test_run_simple_backtest_returns_daily_series_and_metrics():
         "benchmark_return",
         "drawdown",
         "positions_count",
+        "target_exposure",
     ]
     assert daily_result.loc[0, "portfolio_value"] == 1.0
     assert daily_result.loc[0, "benchmark_value"] == 1.0
-    assert {"total_return", "annualized_return", "max_drawdown", "sharpe", "turnover", "total_cost"} == set(metrics)
+    assert {
+        "total_return",
+        "annualized_return",
+        "max_drawdown",
+        "sharpe",
+        "turnover",
+        "total_cost",
+        "average_exposure",
+    } == set(metrics)
 
 
 def test_run_simple_backtest_applies_selected_portfolio_returns():
@@ -151,3 +161,53 @@ def test_run_simple_backtest_respects_limit_and_fee_constraints():
     assert result.loc[1, "positions_count"] == 0
     assert result.loc[2, "positions_count"] == 1
     assert metrics["total_cost"] > 0
+
+
+def test_run_simple_backtest_reduces_exposure_when_sentiment_is_weak():
+    daily = pd.DataFrame(
+        [
+            {"trade_date": "2024-01-01", "symbol": "AAA", "close": 10.0},
+            {"trade_date": "2024-01-02", "symbol": "AAA", "close": 11.0},
+            {"trade_date": "2024-01-03", "symbol": "AAA", "close": 12.0},
+        ]
+    )
+    factors = pd.DataFrame(
+        [
+            {"trade_date": "2024-01-01", "symbol": "AAA", "test_factor": 1.0},
+            {"trade_date": "2024-01-02", "symbol": "AAA", "test_factor": 1.0},
+        ]
+    )
+    sentiment = pd.DataFrame(
+        [
+            {"trade_date": "2024-01-01", "market_sentiment_score": -2.0},
+            {"trade_date": "2024-01-02", "market_sentiment_score": 1.0},
+        ]
+    )
+
+    result, metrics = run_simple_backtest(
+        factors,
+        daily,
+        "test_factor",
+        top_quantile=1.0,
+        rebalance_interval=1,
+        transaction_cost=0.0,
+        market_sentiment=sentiment,
+        sentiment_threshold=0.0,
+        weak_sentiment_exposure=0.3,
+    )
+
+    assert result.loc[1, "target_exposure"] == 0.3
+    assert result.loc[2, "target_exposure"] == 1.0
+    assert round(result.loc[1, "daily_return"], 6) == round((11 / 10 - 1) * 0.3, 6)
+    assert metrics["average_exposure"] < 1.0
+
+
+def test_run_simple_backtest_rejects_weak_exposure_above_normal_exposure():
+    with pytest.raises(ValueError, match="weak_sentiment_exposure"):
+        run_simple_backtest(
+            make_backtest_factors(),
+            make_backtest_daily_bars(),
+            "test_factor",
+            weak_sentiment_exposure=0.8,
+            normal_exposure=0.5,
+        )

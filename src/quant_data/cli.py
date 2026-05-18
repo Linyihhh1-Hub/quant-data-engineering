@@ -128,10 +128,16 @@ def run_backtest(
     commission_rate: float,
     slippage_rate: float,
     stamp_tax_rate: float,
+    sentiment_threshold: float | None = None,
+    weak_sentiment_exposure: float = 0.5,
+    normal_exposure: float = 1.0,
 ) -> tuple[Path, Path]:
     paths = _output_paths(output_dir, factor_name)
     cleaned = read_parquet(paths["dwd"])
     factors = read_parquet(paths["factors"])
+    market_sentiment = None
+    if sentiment_threshold is not None:
+        market_sentiment = read_parquet(paths["market_sentiment"])
     daily_result, metrics = run_simple_backtest(
         factors,
         cleaned,
@@ -142,6 +148,10 @@ def run_backtest(
         commission_rate=commission_rate,
         slippage_rate=slippage_rate,
         stamp_tax_rate=stamp_tax_rate,
+        market_sentiment=market_sentiment,
+        sentiment_threshold=sentiment_threshold,
+        weak_sentiment_exposure=weak_sentiment_exposure,
+        normal_exposure=normal_exposure,
     )
     daily_path = write_parquet(daily_result, paths["backtest_daily"])
     metrics_path = paths["backtest_metrics"]
@@ -226,6 +236,9 @@ def build_parser() -> argparse.ArgumentParser:
     backtest.add_argument("--commission-rate", type=float, default=0.0003)
     backtest.add_argument("--slippage-rate", type=float, default=0.0005)
     backtest.add_argument("--stamp-tax-rate", type=float, default=0.0005)
+    backtest.add_argument("--sentiment-threshold", type=float)
+    backtest.add_argument("--weak-sentiment-exposure", type=float, default=0.5)
+    backtest.add_argument("--normal-exposure", type=float, default=1.0)
 
     load_clickhouse = subparsers.add_parser("load-clickhouse")
     add_common(load_clickhouse)
@@ -248,6 +261,9 @@ def build_parser() -> argparse.ArgumentParser:
     run_all.add_argument("--commission-rate", type=float, default=0.0003)
     run_all.add_argument("--slippage-rate", type=float, default=0.0005)
     run_all.add_argument("--stamp-tax-rate", type=float, default=0.0005)
+    run_all.add_argument("--sentiment-threshold", type=float)
+    run_all.add_argument("--weak-sentiment-exposure", type=float, default=0.5)
+    run_all.add_argument("--normal-exposure", type=float, default=1.0)
     run_all.add_argument("--min-rows-per-date", type=int, default=1)
     run_all.add_argument("--abnormal-return-threshold", type=float, default=0.2)
     return parser
@@ -295,6 +311,9 @@ def main(argv: list[str] | None = None) -> int:
             args.commission_rate,
             args.slippage_rate,
             args.stamp_tax_rate,
+            args.sentiment_threshold,
+            args.weak_sentiment_exposure,
+            args.normal_exposure,
         )
     elif args.command == "load-clickhouse":
         run_load_clickhouse(
@@ -320,6 +339,9 @@ def main(argv: list[str] | None = None) -> int:
             args.commission_rate,
             args.slippage_rate,
             args.stamp_tax_rate,
+            args.sentiment_threshold,
+            args.weak_sentiment_exposure,
+            args.normal_exposure,
         )
     return 0
 

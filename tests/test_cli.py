@@ -60,7 +60,54 @@ def test_cli_run_all_writes_pipeline_outputs(tmp_path):
     metrics_path = tmp_path / "ads" / "backtest_metrics_momentum_20d.json"
     assert metrics_path.exists()
     metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
-    assert {"total_return", "annualized_return", "max_drawdown", "sharpe", "turnover", "total_cost"} == set(metrics)
+    assert {
+        "total_return",
+        "annualized_return",
+        "max_drawdown",
+        "sharpe",
+        "turnover",
+        "total_cost",
+        "average_exposure",
+    } == set(metrics)
+
+
+def test_cli_run_all_supports_sentiment_timing_backtest(tmp_path):
+    raw_path = tmp_path / "ods" / "stock_daily.parquet"
+    raw_path.parent.mkdir(parents=True)
+    make_pipeline_raw_frame().to_parquet(raw_path, index=False)
+
+    exit_code = main(
+        [
+            "run-all",
+            "--input",
+            str(raw_path),
+            "--output-dir",
+            str(tmp_path),
+            "--factor-name",
+            "momentum_20d",
+            "--horizon",
+            "1",
+            "--groups",
+            "2",
+            "--top-quantile",
+            "0.5",
+            "--rebalance-interval",
+            "5",
+            "--min-rows-per-date",
+            "4",
+            "--sentiment-threshold",
+            "0",
+            "--weak-sentiment-exposure",
+            "0.3",
+        ]
+    )
+
+    daily_result = pd.read_parquet(tmp_path / "ads" / "backtest_daily_momentum_20d.parquet")
+    metrics = json.loads((tmp_path / "ads" / "backtest_metrics_momentum_20d.json").read_text(encoding="utf-8"))
+    assert exit_code == 0
+    assert "target_exposure" in daily_result.columns
+    assert "average_exposure" in metrics
+    assert daily_result["target_exposure"].between(0.3, 1.0).all()
 
 
 def test_cli_ingest_akshare_writes_ods_file(monkeypatch, tmp_path):

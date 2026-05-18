@@ -155,13 +155,25 @@ data/ads/market_sentiment_daily.parquet
 * 在调仓日按因子值选择 top 分位股票
 * 等权持仓
 * 支持交易成本
+* 支持情绪择时：市场情绪分数低于阈值时降低目标仓位
 * 使用全市场等权收益作为简化基准
-* 输出组合净值、基准净值、日收益、回撤
+* 输出组合净值、基准净值、日收益、回撤、目标仓位
 
 指标：
 
 ```text
-total\_return, annualized\_return, max\_drawdown, sharpe, turnover
+total\_return, annualized\_return, max\_drawdown, sharpe, turnover, total\_cost, average\_exposure
+```
+
+情绪择时默认关闭。开启后，回测会使用调仓信号日的 `market_sentiment_score` 判断下一交易日目标仓位，避免使用未来数据。例如：
+
+```powershell
+.\.venv\Scripts\python.exe -m quant_data.cli backtest `
+  --output-dir data `
+  --factor-name momentum_20d `
+  --sentiment-threshold 0 `
+  --weak-sentiment-exposure 0.3 `
+  --normal-exposure 1.0
 ```
 
 ## CLI 串联流程
@@ -177,6 +189,17 @@ CLI 的作用是把各个模块串成可执行的数据流水线。每个命令�
 ```
 
 脚本会执行：增量采集、清洗、质量检查、因子计算、因子评估、回测，并在配置了 ClickHouse 密码时自动写入 ClickHouse。ClickHouse 密码建议通过环境变量传入：
+
+如果要在一键脚本中开启情绪择时回测，可以增加以下参数：
+
+```powershell
+.\scripts\run_daily_pipeline.ps1 `
+  -StartDate 20240101 `
+  -EndDate 20241231 `
+  -SentimentThreshold 0 `
+  -WeakSentimentExposure 0.3 `
+  -NormalExposure 1.0
+```
 
 ```powershell
 $env:CLICKHOUSE_PASSWORD = "<你的 ClickHouse 密码>"
@@ -242,7 +265,10 @@ data/reports/ingestion_report.parquet
   --horizon 5 `
   --groups 5 `
   --top-quantile 0.1 `
-  --rebalance-interval 20
+  --rebalance-interval 20 `
+  --sentiment-threshold 0 `
+  --weak-sentiment-exposure 0.3 `
+  --normal-exposure 1.0
 ```
 
 也可以分阶段运行：

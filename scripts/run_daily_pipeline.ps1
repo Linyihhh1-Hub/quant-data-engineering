@@ -15,6 +15,9 @@ param(
     [double]$CommissionRate = 0.0003,
     [double]$SlippageRate = 0.0005,
     [double]$StampTaxRate = 0.0005,
+    [Nullable[double]]$SentimentThreshold = $null,
+    [double]$WeakSentimentExposure = 0.5,
+    [double]$NormalExposure = 1.0,
     [int]$Retries = 3,
     [double]$RetryWaitSeconds = 2,
     [double]$RequestIntervalSeconds = 0.5,
@@ -99,17 +102,27 @@ if ($Incremental) {
 & $Python @IngestArgs
 
 Write-Host "Step 4/5 Run local data pipeline"
-& $Python -m quant_data.cli run-all `
-    --input $OdsPath `
-    --output-dir data `
-    --factor-name $FactorName `
-    --groups $Groups `
-    --min-rows-per-date $MinRowsPerDate `
-    --abnormal-return-threshold $AbnormalReturnThreshold `
-    --transaction-cost $TransactionCost `
-    --commission-rate $CommissionRate `
-    --slippage-rate $SlippageRate `
-    --stamp-tax-rate $StampTaxRate
+$RunAllArgs = @(
+    "-m", "quant_data.cli", "run-all",
+    "--input", $OdsPath,
+    "--output-dir", "data",
+    "--factor-name", $FactorName,
+    "--groups", "$Groups",
+    "--min-rows-per-date", "$MinRowsPerDate",
+    "--abnormal-return-threshold", "$AbnormalReturnThreshold",
+    "--transaction-cost", "$TransactionCost",
+    "--commission-rate", "$CommissionRate",
+    "--slippage-rate", "$SlippageRate",
+    "--stamp-tax-rate", "$StampTaxRate"
+)
+if ($null -ne $SentimentThreshold) {
+    $RunAllArgs += @(
+        "--sentiment-threshold", "$SentimentThreshold",
+        "--weak-sentiment-exposure", "$WeakSentimentExposure",
+        "--normal-exposure", "$NormalExposure"
+    )
+}
+& $Python @RunAllArgs
 
 if ($LoadClickHouse -and $ClickHousePassword) {
     Write-Host "Step 5/5 Load results into ClickHouse"
