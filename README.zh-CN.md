@@ -23,6 +23,7 @@ pandas / numpy
 PyArrow / Parquet
 pytest
 argparse CLI
+Streamlit
 ```
 
 ## 快速运行
@@ -175,6 +176,24 @@ total\_return, annualized\_return, max\_drawdown, sharpe, turnover, total\_cost,
   --weak-sentiment-exposure 0.3 `
   --normal-exposure 1.0
 ```
+
+### 7\. Streamlit 展示看板
+
+模块：`src/quant_data/dashboard/app.py`
+
+看板包含 3 个核心页面：
+
+* 数据链路概览：展示 ODS/DWD/ADS 行数、股票数量、日期范围、采集失败股票和质量异常规则
+* 因子有效性评估：展示 IC 均值、RankIC 均值、正 IC 占比、ICIR、IC/RankIC 曲线和分组收益
+* 策略回测表现：展示收益风险指标、策略净值、基准净值、回撤曲线和情绪择时仓位曲线
+
+启动方式：
+
+```powershell
+.\.venv\Scripts\streamlit.exe run src\quant_data\dashboard\app.py
+```
+
+默认读取 `data` 目录下的 Parquet 和 JSON 结果，可以在页面左侧修改数据目录。
 
 ## CLI 串联流程
 

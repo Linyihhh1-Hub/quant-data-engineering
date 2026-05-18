@@ -26,6 +26,12 @@ Run tests:
 .\.venv\Scripts\python.exe -m pytest -q
 ```
 
+Launch the local Streamlit dashboard:
+
+```powershell
+.\.venv\Scripts\streamlit.exe run src\quant_data\dashboard\app.py
+```
+
 ## Phase 2: Data Quality
 
 Implemented daily market data quality checks:
@@ -93,8 +99,18 @@ Implemented a simple factor-based backtest:
 Backtest metrics:
 
 ```text
-total_return, annualized_return, max_drawdown, sharpe, turnover
+total_return, annualized_return, max_drawdown, sharpe, turnover, total_cost, average_exposure
 ```
+
+## Streamlit Dashboard
+
+The dashboard is implemented in `src/quant_data/dashboard/app.py` and reads local pipeline outputs from the `data` directory.
+
+It provides three focused tabs:
+
+- Data pipeline overview
+- Factor effectiveness evaluation
+- Strategy backtest performance
 
 ## CLI Pipeline
 
