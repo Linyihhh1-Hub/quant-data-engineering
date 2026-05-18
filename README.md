@@ -212,6 +212,7 @@ dim_trade_calendar
 dim_stock_basic
 dwd_stock_daily
 ads_factor_wide_daily
+ads_market_sentiment_daily
 ads_factor_eval
 ads_backtest_daily
 ops_ingestion_report

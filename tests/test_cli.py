@@ -53,6 +53,7 @@ def test_cli_run_all_writes_pipeline_outputs(tmp_path):
     assert (tmp_path / "dwd" / "stock_daily.parquet").exists()
     assert (tmp_path / "reports" / "data_quality_report.parquet").exists()
     assert (tmp_path / "ads" / "factor_wide_daily.parquet").exists()
+    assert (tmp_path / "ads" / "market_sentiment_daily.parquet").exists()
     assert (tmp_path / "ads" / "factor_eval_momentum_20d.parquet").exists()
     assert (tmp_path / "ads" / "backtest_daily_momentum_20d.parquet").exists()
 

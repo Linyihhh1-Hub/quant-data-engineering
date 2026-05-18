@@ -9,6 +9,8 @@ from quant_data.dimensions.market import write_stock_basic
 from quant_data.dimensions.market import write_trade_calendar
 from quant_data.evaluation.factor import evaluate_factor
 from quant_data.factors.baseline import compute_baseline_factors
+from quant_data.factors.sentiment import compute_market_sentiment
+from quant_data.factors.sentiment import join_market_sentiment
 from quant_data.ingestion.akshare_a_share import ingest_stock_daily
 from quant_data.ingestion.symbols import load_symbols
 from quant_data.quality.rules import run_quality_checks
@@ -24,6 +26,7 @@ def _output_paths(output_dir: Path, factor_name: str) -> dict[str, Path]:
         "dwd": output_dir / "dwd" / "stock_daily.parquet",
         "quality": output_dir / "reports" / "data_quality_report.parquet",
         "factors": output_dir / "ads" / "factor_wide_daily.parquet",
+        "market_sentiment": output_dir / "ads" / "market_sentiment_daily.parquet",
         "evaluation": output_dir / "ads" / f"factor_eval_{factor_name}.parquet",
         "backtest_daily": output_dir / "ads" / f"backtest_daily_{factor_name}.parquet",
         "backtest_metrics": output_dir / "ads" / f"backtest_metrics_{factor_name}.json",
@@ -102,6 +105,9 @@ def run_factors(output_dir: Path) -> Path:
     paths = _output_paths(output_dir, "factor")
     cleaned = read_parquet(paths["dwd"])
     factors = compute_baseline_factors(cleaned)
+    sentiment = compute_market_sentiment(cleaned)
+    write_parquet(sentiment, paths["market_sentiment"])
+    factors = join_market_sentiment(factors, sentiment)
     return write_parquet(factors, paths["factors"])
 
 

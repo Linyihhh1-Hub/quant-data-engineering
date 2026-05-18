@@ -5,6 +5,7 @@ from quant_data.service.query import (
     get_factor_values,
     get_failed_ingestion_symbols,
     get_latest_ingestion_run,
+    get_market_sentiment,
     get_quality_failures,
     get_stock_daily,
     get_stock_daily_panel,
@@ -87,3 +88,16 @@ def test_monitoring_query_helpers_use_ops_tables():
     assert "FROM ops_ingestion_runs" in sql_text
     assert "FROM ops_ingestion_report" in sql_text
     assert "FROM ops_data_quality_report" in sql_text
+
+
+def test_get_market_sentiment_queries_date_range():
+    client = FakeQueryClient()
+
+    get_market_sentiment(client, "2024-01-01", "2024-12-31")
+
+    call = client.calls[0]
+    assert "FROM ads_market_sentiment_daily" in call["sql"]
+    assert call["parameters"] == {
+        "start_date": "2024-01-01",
+        "end_date": "2024-12-31",
+    }

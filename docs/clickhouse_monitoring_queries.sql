@@ -10,6 +10,8 @@ SELECT 'dwd_stock_daily', count() FROM dwd_stock_daily
 UNION ALL
 SELECT 'ads_factor_wide_daily', count() FROM ads_factor_wide_daily
 UNION ALL
+SELECT 'ads_market_sentiment_daily', count() FROM ads_market_sentiment_daily
+UNION ALL
 SELECT 'ads_factor_eval', count() FROM ads_factor_eval
 UNION ALL
 SELECT 'ads_backtest_daily', count() FROM ads_backtest_daily
@@ -96,6 +98,19 @@ SELECT
     rank_ic,
     long_short_return
 FROM ads_factor_eval
+ORDER BY trade_date DESC
+LIMIT 20;
+
+-- 9.1 Inspect recent market sentiment values.
+SELECT
+    trade_date,
+    market_up_ratio,
+    market_strong_ratio,
+    market_weak_ratio,
+    market_amount_ratio_20d,
+    profit_effect,
+    market_sentiment_score
+FROM ads_market_sentiment_daily
 ORDER BY trade_date DESC
 LIMIT 20;
 

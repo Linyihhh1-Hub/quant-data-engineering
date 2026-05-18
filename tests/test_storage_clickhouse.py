@@ -15,6 +15,22 @@ class FakeClient:
         self.inserts.append((table, df.copy()))
 
 
+def write_required_outputs(tmp_path):
+    dwd = pd.DataFrame({"trade_date": [pd.Timestamp("2024-01-02")], "symbol": ["000001.SZ"]})
+    factors = pd.DataFrame({"trade_date": [pd.Timestamp("2024-01-02")], "symbol": ["000001.SZ"], "momentum_20d": [0.1]})
+    sentiment = pd.DataFrame({"trade_date": [pd.Timestamp("2024-01-02")], "market_sentiment_score": [0.5]})
+    eval_report = pd.DataFrame({"trade_date": [pd.Timestamp("2024-01-02")], "factor_name": ["momentum_20d"], "ic": [0.5]})
+    backtest = pd.DataFrame({"trade_date": [pd.Timestamp("2024-01-02")], "portfolio_value": [1.0]})
+
+    (tmp_path / "dwd").mkdir()
+    (tmp_path / "ads").mkdir()
+    dwd.to_parquet(tmp_path / "dwd" / "stock_daily.parquet", index=False)
+    factors.to_parquet(tmp_path / "ads" / "factor_wide_daily.parquet", index=False)
+    sentiment.to_parquet(tmp_path / "ads" / "market_sentiment_daily.parquet", index=False)
+    eval_report.to_parquet(tmp_path / "ads" / "factor_eval_momentum_20d.parquet", index=False)
+    backtest.to_parquet(tmp_path / "ads" / "backtest_daily_momentum_20d.parquet", index=False)
+
+
 def test_write_dataframe_creates_table_and_inserts_rows():
     client = FakeClient()
     frame = pd.DataFrame(
@@ -53,29 +69,21 @@ def test_write_dataframe_uses_nullable_type_for_missing_datetime():
 
 def test_load_pipeline_outputs_loads_expected_tables(tmp_path):
     client = FakeClient()
-    dwd = pd.DataFrame({"trade_date": [pd.Timestamp("2024-01-02")], "symbol": ["000001.SZ"]})
-    factors = pd.DataFrame({"trade_date": [pd.Timestamp("2024-01-02")], "symbol": ["000001.SZ"], "momentum_20d": [0.1]})
-    eval_report = pd.DataFrame({"trade_date": [pd.Timestamp("2024-01-02")], "factor_name": ["momentum_20d"], "ic": [0.5]})
-    backtest = pd.DataFrame({"trade_date": [pd.Timestamp("2024-01-02")], "portfolio_value": [1.0]})
-
-    (tmp_path / "dwd").mkdir()
-    (tmp_path / "ads").mkdir()
-    dwd.to_parquet(tmp_path / "dwd" / "stock_daily.parquet", index=False)
-    factors.to_parquet(tmp_path / "ads" / "factor_wide_daily.parquet", index=False)
-    eval_report.to_parquet(tmp_path / "ads" / "factor_eval_momentum_20d.parquet", index=False)
-    backtest.to_parquet(tmp_path / "ads" / "backtest_daily_momentum_20d.parquet", index=False)
+    write_required_outputs(tmp_path)
 
     loaded = load_pipeline_outputs(client, tmp_path, factor_name="momentum_20d")
 
     assert loaded == {
         "dwd_stock_daily": 1,
         "ads_factor_wide_daily": 1,
+        "ads_market_sentiment_daily": 1,
         "ads_factor_eval": 1,
         "ads_backtest_daily": 1,
     }
     assert [table for table, _ in client.inserts] == [
         "dwd_stock_daily",
         "ads_factor_wide_daily",
+        "ads_market_sentiment_daily",
         "ads_factor_eval",
         "ads_backtest_daily",
     ]
@@ -83,10 +91,7 @@ def test_load_pipeline_outputs_loads_expected_tables(tmp_path):
 
 def test_load_pipeline_outputs_loads_ops_tables_when_reports_exist(tmp_path):
     client = FakeClient()
-    dwd = pd.DataFrame({"trade_date": [pd.Timestamp("2024-01-02")], "symbol": ["000001.SZ"]})
-    factors = pd.DataFrame({"trade_date": [pd.Timestamp("2024-01-02")], "symbol": ["000001.SZ"], "momentum_20d": [0.1]})
-    eval_report = pd.DataFrame({"trade_date": [pd.Timestamp("2024-01-02")], "factor_name": ["momentum_20d"], "ic": [0.5]})
-    backtest = pd.DataFrame({"trade_date": [pd.Timestamp("2024-01-02")], "portfolio_value": [1.0]})
+    write_required_outputs(tmp_path)
     ingestion_report = pd.DataFrame({"symbol": ["000001"], "status": ["SUCCESS"], "row_count": [1], "message": [""]})
     ingestion_runs = pd.DataFrame(
         {
@@ -101,14 +106,8 @@ def test_load_pipeline_outputs_loads_ops_tables_when_reports_exist(tmp_path):
     calendar = pd.DataFrame({"trade_date": [pd.Timestamp("2024-01-02")], "is_open": [True]})
     stock_basic = pd.DataFrame({"symbol": ["000001.SZ"], "raw_symbol": ["000001"], "name": ["平安银行"], "exchange": ["SZ"], "is_st": [False]})
 
-    (tmp_path / "dwd").mkdir()
-    (tmp_path / "ads").mkdir()
     (tmp_path / "reports").mkdir()
     (tmp_path / "dim").mkdir()
-    dwd.to_parquet(tmp_path / "dwd" / "stock_daily.parquet", index=False)
-    factors.to_parquet(tmp_path / "ads" / "factor_wide_daily.parquet", index=False)
-    eval_report.to_parquet(tmp_path / "ads" / "factor_eval_momentum_20d.parquet", index=False)
-    backtest.to_parquet(tmp_path / "ads" / "backtest_daily_momentum_20d.parquet", index=False)
     ingestion_report.to_parquet(tmp_path / "reports" / "ingestion_report.parquet", index=False)
     ingestion_runs.to_parquet(tmp_path / "reports" / "ingestion_runs.parquet", index=False)
     quality.to_parquet(tmp_path / "reports" / "data_quality_report.parquet", index=False)

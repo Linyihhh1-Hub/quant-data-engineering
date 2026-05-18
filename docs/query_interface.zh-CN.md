@@ -102,6 +102,20 @@ df = get_factor_eval(client, factor_name="momentum_20d")
 trade_date, factor_name, ic, rank_ic, top_group_return, bottom_group_return, long_short_return
 ```
 
+## 查询市场情绪因子
+
+```python
+from quant_data.service.query import get_market_sentiment
+
+df = get_market_sentiment(
+    client,
+    start_date="2024-01-01",
+    end_date="2024-12-31",
+)
+```
+
+返回市场宽度、成交活跃度、赚钱效应和综合情绪分数等市场级字段。
+
 ## 查询 OPS 监控信息
 
 查询最近一次采集任务：

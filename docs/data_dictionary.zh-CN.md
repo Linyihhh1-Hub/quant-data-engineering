@@ -167,8 +167,39 @@
 | `volatility_20d` | 20 日波动率因子 | 1 日收益率的 20 日滚动标准差 |
 | `volume_ratio_5d` | 5 日量比因子 | `volume / rolling_mean(volume, 5)` |
 | `ma_bias_20d` | 20 日均线偏离因子 | `close / rolling_mean(close, 20) - 1` |
+| `market_up_ratio` | 市场上涨股票占比，按日期从市场情绪表合并 | `return_1d > 0` 股票数 / 当日股票数 |
+| `market_strong_ratio` | 市场强势股票占比 | `return_1d > 3%` 股票数 / 当日股票数 |
+| `market_weak_ratio` | 市场弱势股票占比 | `return_1d < -3%` 股票数 / 当日股票数 |
+| `market_amount_ratio_20d` | 市场成交额放大倍数 | 当日成交额 / 过去 20 日成交额均值 |
+| `profit_effect` | 赚钱效应 | 上涨股票平均收益 - 下跌股票平均跌幅绝对值 |
+| `market_sentiment_score` | 综合市场情绪分数 | 多个子因子的 60 日滚动 z-score 合成 |
 
-说明：所有滚动计算都按 `symbol` 分组，避免不同股票之间的数据串线。
+说明：个股量价因子的滚动计算都按 `symbol` 分组，避免不同股票之间的数据串线；市场情绪字段是市场级别状态变量，同一天对所有股票相同。
+
+## ADS 市场情绪表
+
+路径：`data/ads/market_sentiment_daily.parquet`
+
+| 字段 | 含义 |
+| --- | --- |
+| `trade_date` | 交易日期 |
+| `stock_count` | 当日参与统计的股票数量 |
+| `market_up_ratio` | 上涨股票占比 |
+| `market_down_ratio` | 下跌股票占比 |
+| `market_strong_ratio` | 强势股票占比，`return_1d > 3%` |
+| `market_weak_ratio` | 弱势股票占比，`return_1d < -3%` |
+| `market_amount` | 当日市场总成交额 |
+| `market_volume` | 当日市场总成交量 |
+| `market_amount_ratio_20d` | 当日成交额 / 过去 20 日成交额均值 |
+| `market_volume_ratio_20d` | 当日成交量 / 过去 20 日成交量均值 |
+| `market_return_mean` | 当日股票平均收益 |
+| `market_return_median` | 当日股票收益中位数 |
+| `market_return_positive_mean` | 上涨股票平均收益 |
+| `market_return_negative_mean` | 下跌股票平均收益 |
+| `profit_effect` | 上涨股票平均收益 - 下跌股票平均跌幅绝对值 |
+| `market_sentiment_score` | 综合市场情绪分数 |
+
+说明：市场情绪因子更适合用于市场状态识别、仓位控制或分市场环境回测，不适合单独作为横截面 IC 因子解释个股强弱。
 
 ## 因子评估表
 
@@ -215,13 +246,13 @@
 
 ## ClickHouse 表
 
-当前加载命令会写入以下 4 张表：
-当前加载命令会写入以下业务表和 OPS 监控表：
+当前加载命令会写入以下业务表、DIM 表和 OPS 监控表：
 
 | 表名 | 对应本地文件 | 含义 |
 | --- | --- | --- |
 | `dwd_stock_daily` | `data/dwd/stock_daily.parquet` | 清洗后日线行情 |
 | `ads_factor_wide_daily` | `data/ads/factor_wide_daily.parquet` | 因子宽表 |
+| `ads_market_sentiment_daily` | `data/ads/market_sentiment_daily.parquet` | 市场情绪因子表 |
 | `ads_factor_eval` | `data/ads/factor_eval_<factor_name>.parquet` | 因子评估结果 |
 | `ads_backtest_daily` | `data/ads/backtest_daily_<factor_name>.parquet` | 回测日度结果 |
 | `ops_ingestion_report` | `data/reports/ingestion_report.parquet` | 单只股票采集状态 |

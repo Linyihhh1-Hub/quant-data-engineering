@@ -62,6 +62,7 @@ def load_pipeline_outputs(client, data_dir: str | Path, factor_name: str) -> dic
     required_table_files = {
         "dwd_stock_daily": root / "dwd" / "stock_daily.parquet",
         "ads_factor_wide_daily": root / "ads" / "factor_wide_daily.parquet",
+        "ads_market_sentiment_daily": root / "ads" / "market_sentiment_daily.parquet",
         "ads_factor_eval": root / "ads" / f"factor_eval_{factor_name}.parquet",
         "ads_backtest_daily": root / "ads" / f"backtest_daily_{factor_name}.parquet",
     }

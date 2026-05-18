@@ -160,6 +160,34 @@ def get_factor_eval(client, factor_name: str) -> pd.DataFrame:
     return client.query_df(sql, parameters={"factor_name": factor_name})
 
 
+def get_market_sentiment(client, start_date: str, end_date: str) -> pd.DataFrame:
+    sql = """
+    SELECT
+        trade_date,
+        stock_count,
+        market_up_ratio,
+        market_down_ratio,
+        market_strong_ratio,
+        market_weak_ratio,
+        market_amount,
+        market_volume,
+        market_amount_ratio_20d,
+        market_volume_ratio_20d,
+        profit_effect,
+        market_sentiment_score
+    FROM ads_market_sentiment_daily
+    WHERE trade_date BETWEEN %(start_date)s AND %(end_date)s
+    ORDER BY trade_date
+    """
+    return client.query_df(
+        sql,
+        parameters={
+            "start_date": start_date,
+            "end_date": end_date,
+        },
+    )
+
+
 def get_latest_ingestion_run(client) -> pd.DataFrame:
     sql = """
     SELECT *

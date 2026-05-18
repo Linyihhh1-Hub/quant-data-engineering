@@ -127,7 +127,26 @@ trade\_date, symbol, momentum\_20d, reversal\_5d, volatility\_20d, volume\_ratio
 trade\_date, factor\_name, ic, rank\_ic, top\_group\_return, bottom\_group\_return, long\_short\_return
 ```
 
-### 5\. 简单回测
+### 5\. 行情衍生市场情绪因子
+
+模块：`src/quant_data/factors/sentiment.py`
+
+已实现：
+
+* 市场宽度：上涨股票占比、强势股票占比、弱势股票占比
+* 成交活跃度：成交额放大倍数、成交量放大倍数
+* 赚钱效应：上涨股票平均收益与下跌股票平均跌幅对比
+* 综合情绪分数：多个子因子的 60 日滚动 z-score 合成
+
+输出市场情绪表：
+
+```text
+data/ads/market_sentiment_daily.parquet
+```
+
+核心情绪字段也会按 `trade_date` 合并回 `data/ads/factor_wide_daily.parquet`。
+
+### 6\. 简单回测
 
 模块：`src/quant\_data/backtest/simple.py`
 
@@ -273,6 +292,7 @@ dwd_stock_daily
 dim_trade_calendar
 dim_stock_basic
 ads_factor_wide_daily
+ads_market_sentiment_daily
 ads_factor_eval
 ads_backtest_daily
 ops_ingestion_report
