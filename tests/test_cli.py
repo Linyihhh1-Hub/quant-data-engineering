@@ -94,12 +94,62 @@ def test_cli_ingest_akshare_writes_ods_file(monkeypatch, tmp_path):
             "20240131",
             "--output",
             str(tmp_path / "ods" / "stock_daily.parquet"),
+            "--report",
+            str(tmp_path / "reports" / "ingestion_report.parquet"),
         ]
     )
 
     result = pd.read_parquet(tmp_path / "ods" / "stock_daily.parquet")
+    report = pd.read_parquet(tmp_path / "reports" / "ingestion_report.parquet")
     assert exit_code == 0
     assert result["symbol"].tolist() == ["000001", "600000"]
+    assert report["status"].tolist() == ["SUCCESS", "SUCCESS"]
+
+
+def test_cli_ingest_akshare_reads_symbols_file(monkeypatch, tmp_path):
+    fake = types.ModuleType("akshare")
+
+    def stock_zh_a_hist(symbol: str, period: str, start_date: str, end_date: str, adjust: str):
+        return pd.DataFrame(
+            [
+                {
+                    "日期": "2024-01-02",
+                    "开盘": 10.0,
+                    "最高": 10.5,
+                    "最低": 9.8,
+                    "收盘": 10.2,
+                    "成交量": 1000,
+                    "成交额": 10200,
+                }
+            ]
+        )
+
+    fake.stock_zh_a_hist = stock_zh_a_hist
+    monkeypatch.setitem(sys.modules, "akshare", fake)
+    symbols_file = tmp_path / "symbols.csv"
+    pd.DataFrame({"symbol": ["000001", "600000", "000001"]}).to_csv(symbols_file, index=False)
+
+    exit_code = main(
+        [
+            "ingest-akshare",
+            "--symbols-file",
+            str(symbols_file),
+            "--start-date",
+            "20240101",
+            "--end-date",
+            "20240131",
+            "--output",
+            str(tmp_path / "ods" / "stock_daily.parquet"),
+            "--report",
+            str(tmp_path / "reports" / "ingestion_report.parquet"),
+        ]
+    )
+
+    result = pd.read_parquet(tmp_path / "ods" / "stock_daily.parquet")
+    report = pd.read_parquet(tmp_path / "reports" / "ingestion_report.parquet")
+    assert exit_code == 0
+    assert result["symbol"].tolist() == ["000001", "600000"]
+    assert report["symbol"].tolist() == ["000001", "600000"]
 
 
 def test_cli_load_clickhouse_uses_pipeline_outputs(monkeypatch, tmp_path):

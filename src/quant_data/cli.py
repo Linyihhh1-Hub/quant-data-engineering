@@ -7,6 +7,7 @@ from quant_data.cleaning.daily import clean_daily_bars
 from quant_data.evaluation.factor import evaluate_factor
 from quant_data.factors.baseline import compute_baseline_factors
 from quant_data.ingestion.akshare_a_share import ingest_stock_daily
+from quant_data.ingestion.symbols import load_symbols
 from quant_data.quality.rules import run_quality_checks
 from quant_data.storage.clickhouse import get_client as get_clickhouse_client
 from quant_data.storage.clickhouse import load_pipeline_outputs
@@ -32,18 +33,30 @@ def run_clean(input_path: Path, output_dir: Path) -> Path:
 
 
 def run_ingest_akshare(
-    symbols: str,
+    symbols: str | None,
+    symbols_file: Path | None,
     start_date: str,
     end_date: str,
     output_path: Path,
+    report_path: Path,
     adjust: str,
-) -> Path:
-    symbol_list = [symbol.strip() for symbol in symbols.split(",") if symbol.strip()]
+) -> tuple[Path, Path]:
+    symbol_list: list[str] = []
+    if symbols:
+        symbol_list.extend(symbol.strip() for symbol in symbols.split(",") if symbol.strip())
+    if symbols_file:
+        symbol_list.extend(load_symbols(symbols_file))
+    if not symbol_list:
+        raise ValueError("Provide at least one stock code with --symbols or --symbols-file")
+
+    # CLI 层允许命令行和股票池文件组合使用，这里统一去重并保持输入顺序。
+    deduplicated_symbols = list(dict.fromkeys(symbol_list))
     return ingest_stock_daily(
-        symbols=symbol_list,
+        symbols=deduplicated_symbols,
         start_date=start_date,
         end_date=end_date,
         output_path=output_path,
+        report_path=report_path,
         adjust=adjust,
     )
 
@@ -130,11 +143,13 @@ def build_parser() -> argparse.ArgumentParser:
     add_common(clean)
 
     ingest_akshare = subparsers.add_parser("ingest-akshare")
-    ingest_akshare.add_argument("--symbols", required=True)
+    ingest_akshare.add_argument("--symbols")
+    ingest_akshare.add_argument("--symbols-file", type=Path)
     ingest_akshare.add_argument("--start-date", required=True)
     ingest_akshare.add_argument("--end-date", required=True)
     ingest_akshare.add_argument("--adjust", default="qfq")
     ingest_akshare.add_argument("--output", type=Path, default=Path("data/ods/stock_daily.parquet"))
+    ingest_akshare.add_argument("--report", type=Path, default=Path("data/reports/ingestion_report.parquet"))
 
     quality = subparsers.add_parser("quality")
     add_common(quality)
@@ -188,7 +203,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "clean":
         run_clean(args.input, args.output_dir)
     elif args.command == "ingest-akshare":
-        run_ingest_akshare(args.symbols, args.start_date, args.end_date, args.output, args.adjust)
+        run_ingest_akshare(
+            args.symbols,
+            args.symbols_file,
+            args.start_date,
+            args.end_date,
+            args.output,
+            args.report,
+            args.adjust,
+        )
     elif args.command == "quality":
         run_quality(args.output_dir, args.min_rows_per_date, args.abnormal_return_threshold)
     elif args.command == "factors":

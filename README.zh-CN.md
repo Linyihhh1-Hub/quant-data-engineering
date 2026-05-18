@@ -130,10 +130,29 @@ CLI 的作用是把各个模块串成可执行的数据流水线。每个命令�
   --output data/ods/stock_daily.parquet
 ```
 
+也可以使用 CSV 股票池文件批量采集，示例文件为 `configs/symbols.csv`：
+
+```powershell
+.\.venv\Scripts\python.exe -m quant_data.cli ingest-akshare `
+  --symbols-file configs/symbols.csv `
+  --start-date 20240101 `
+  --end-date 20241231 `
+  --adjust qfq `
+  --output data/ods/stock_daily.parquet `
+  --report data/reports/ingestion_report.parquet
+```
+
+股票池文件必须包含 `symbol` 列，可以额外包含 `name` 等说明字段。采集报告会记录每只股票的采集结果：
+
+```text
+symbol, status, row_count, message
+```
+
 这个命令会调用 AkShare 的 A 股历史行情接口，生成项目后续流水线需要的 ODS 文件：
 
 ```text
 data/ods/stock_daily.parquet
+data/reports/ingestion_report.parquet
 ```
 
 完整运行：

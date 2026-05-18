@@ -74,15 +74,21 @@ def test_ingest_stock_daily_writes_successful_symbols_and_skips_failures(monkeyp
     install_fake_akshare(monkeypatch, fail_symbols={"600000"})
     output_path = tmp_path / "ods" / "stock_daily.parquet"
 
-    result_path = ingest_stock_daily(
+    result_path, report_path = ingest_stock_daily(
         symbols=["000001", "600000"],
         start_date="20240101",
         end_date="20240131",
         output_path=output_path,
+        report_path=tmp_path / "reports" / "ingestion_report.parquet",
         adjust="qfq",
     )
 
     result = pd.read_parquet(result_path)
+    report = pd.read_parquet(report_path)
     assert result_path == output_path
     assert result["symbol"].tolist() == ["000001"]
     assert output_path.exists()
+    assert report["symbol"].tolist() == ["000001", "600000"]
+    assert report["status"].tolist() == ["SUCCESS", "FAILED"]
+    assert report.loc[0, "row_count"] == 1
+    assert "failed: 600000" in report.loc[1, "message"]

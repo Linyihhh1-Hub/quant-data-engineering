@@ -62,10 +62,11 @@ def ingest_stock_daily(
     start_date: str,
     end_date: str,
     output_path: str | Path,
+    report_path: str | Path,
     adjust: str = "qfq",
-) -> Path:
+) -> tuple[Path, Path]:
     frames = []
-    failures = []
+    report_rows = []
     for symbol in symbols:
         normalized_symbol = symbol.strip()
         if not normalized_symbol:
@@ -73,14 +74,40 @@ def ingest_stock_daily(
         try:
             frame = fetch_stock_daily(normalized_symbol, start_date, end_date, adjust=adjust)
         except Exception as error:  # noqa: BLE001 - 采集阶段需要记录单票失败并继续其他股票。
-            failures.append((normalized_symbol, str(error)))
+            report_rows.append(
+                {
+                    "symbol": normalized_symbol,
+                    "status": "FAILED",
+                    "row_count": 0,
+                    "message": str(error),
+                }
+            )
             continue
         if not frame.empty:
             frames.append(frame)
+            report_rows.append(
+                {
+                    "symbol": normalized_symbol,
+                    "status": "SUCCESS",
+                    "row_count": len(frame),
+                    "message": "",
+                }
+            )
+        else:
+            report_rows.append(
+                {
+                    "symbol": normalized_symbol,
+                    "status": "EMPTY",
+                    "row_count": 0,
+                    "message": "AkShare returned empty data",
+                }
+            )
 
+    report_output = write_parquet(pd.DataFrame(report_rows), report_path)
     if not frames:
-        detail = "; ".join(f"{symbol}: {message}" for symbol, message in failures)
+        detail = "; ".join(row["message"] for row in report_rows if row["status"] == "FAILED")
         raise RuntimeError(f"No stock data fetched. Failures: {detail}")
 
     combined = pd.concat(frames, ignore_index=True)
-    return write_parquet(combined, output_path)
+    data_output = write_parquet(combined, output_path)
+    return data_output, report_output

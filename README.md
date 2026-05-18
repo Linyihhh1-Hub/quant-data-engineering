@@ -109,6 +109,24 @@ Fetch real A-share daily data with AkShare:
   --output data/ods/stock_daily.parquet
 ```
 
+You can also manage the universe with a CSV stock pool:
+
+```powershell
+.\.venv\Scripts\python.exe -m quant_data.cli ingest-akshare `
+  --symbols-file configs/symbols.csv `
+  --start-date 20240101 `
+  --end-date 20241231 `
+  --adjust qfq `
+  --output data/ods/stock_daily.parquet `
+  --report data/reports/ingestion_report.parquet
+```
+
+The stock pool file must contain a `symbol` column. The ingestion report records per-symbol status:
+
+```text
+symbol, status, row_count, message
+```
+
 Run all local pipeline stages from a raw ODS Parquet file:
 
 ```powershell
