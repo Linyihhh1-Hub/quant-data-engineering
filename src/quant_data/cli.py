@@ -11,6 +11,7 @@ from quant_data.evaluation.factor import evaluate_factor
 from quant_data.evaluation.stability import write_stability_reports
 from quant_data.factors.baseline import compute_baseline_factors
 from quant_data.factors.baseline import FACTOR_COLUMNS
+from quant_data.factors.baseline import ZSCORE_FACTOR_COLUMNS
 from quant_data.factors.sentiment import compute_market_sentiment
 from quant_data.factors.sentiment import join_market_sentiment
 from quant_data.ingestion.akshare_a_share import ingest_stock_daily
@@ -164,7 +165,7 @@ def run_backtest(
 
 def _parse_factor_names(value: str | None) -> list[str]:
     if not value:
-        return list(FACTOR_COLUMNS)
+        return [*FACTOR_COLUMNS, *ZSCORE_FACTOR_COLUMNS]
     return [factor.strip() for factor in value.split(",") if factor.strip()]
 
 
@@ -275,13 +276,13 @@ def build_parser() -> argparse.ArgumentParser:
 
     evaluate = subparsers.add_parser("evaluate")
     add_common(evaluate)
-    evaluate.add_argument("--factor-name", default="momentum_20d")
+    evaluate.add_argument("--factor-name", default="momentum_20d_zscore")
     evaluate.add_argument("--horizon", type=int, default=5)
     evaluate.add_argument("--groups", type=int, default=5)
 
     backtest = subparsers.add_parser("backtest")
     add_common(backtest)
-    backtest.add_argument("--factor-name", default="momentum_20d")
+    backtest.add_argument("--factor-name", default="momentum_20d_zscore")
     backtest.add_argument("--top-quantile", type=float, default=0.1)
     backtest.add_argument("--rebalance-interval", type=int, default=20)
     backtest.add_argument("--transaction-cost", type=float, default=0.001)
@@ -315,7 +316,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     load_clickhouse = subparsers.add_parser("load-clickhouse")
     add_common(load_clickhouse)
-    load_clickhouse.add_argument("--factor-name", default="momentum_20d")
+    load_clickhouse.add_argument("--factor-name", default="momentum_20d_zscore")
     load_clickhouse.add_argument("--host", default="127.0.0.1")
     load_clickhouse.add_argument("--port", type=int, default=8123)
     load_clickhouse.add_argument("--username", default="default")
@@ -325,7 +326,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_all = subparsers.add_parser("run-all")
     run_all.add_argument("--input", type=Path, required=True)
     add_common(run_all)
-    run_all.add_argument("--factor-name", default="momentum_20d")
+    run_all.add_argument("--factor-name", default="momentum_20d_zscore")
     run_all.add_argument("--horizon", type=int, default=5)
     run_all.add_argument("--groups", type=int, default=5)
     run_all.add_argument("--top-quantile", type=float, default=0.1)

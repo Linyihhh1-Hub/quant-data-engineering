@@ -167,6 +167,8 @@
 | `volatility_20d` | 20 日波动率因子 | 1 日收益率的 20 日滚动标准差 |
 | `volume_ratio_5d` | 5 日量比因子 | `volume / rolling_mean(volume, 5)` |
 | `ma_bias_20d` | 20 日均线偏离因子 | `close / rolling_mean(close, 20) - 1` |
+| `<factor>_winsorized` | 因子去极值结果 | 按交易日截面做 1% / 99% 分位截断 |
+| `<factor>_zscore` | 因子标准化结果 | 对去极值后的因子按交易日截面计算 z-score |
 | `market_up_ratio` | 市场上涨股票占比，按日期从市场情绪表合并 | `return_1d > 0` 股票数 / 当日股票数 |
 | `market_strong_ratio` | 市场强势股票占比 | `return_1d > 3%` 股票数 / 当日股票数 |
 | `market_weak_ratio` | 市场弱势股票占比 | `return_1d < -3%` 股票数 / 当日股票数 |
@@ -174,7 +176,7 @@
 | `profit_effect` | 赚钱效应 | 上涨股票平均收益 - 下跌股票平均跌幅绝对值 |
 | `market_sentiment_score` | 综合市场情绪分数 | 多个子因子的 60 日滚动 z-score 合成 |
 
-说明：个股量价因子的滚动计算都按 `symbol` 分组，避免不同股票之间的数据串线；市场情绪字段是市场级别状态变量，同一天对所有股票相同。
+说明：个股量价因子的滚动计算都按 `symbol` 分组，避免不同股票之间的数据串线；去极值和 z-score 按 `trade_date` 做横截面处理，避免极端值和量纲差异影响 IC、分组收益和回测结果；市场情绪字段是市场级别状态变量，同一天对所有股票相同。
 
 ## ADS 市场情绪表
 

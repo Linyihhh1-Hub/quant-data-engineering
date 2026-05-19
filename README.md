@@ -55,6 +55,7 @@ Streamlit dashboard
   - `volume_ratio_5d`
   - `ma_bias_20d`
 - Market sentiment factors such as market breadth, trading activity, profit effect, and rolling sentiment score.
+- Cross-sectional factor preprocessing with 1% / 99% winsorization and daily z-score standardization.
 - Multi-factor evaluation with IC, RankIC, positive IC ratio, ICIR, grouped returns, and long-short return.
 - Yearly and rolling-window stability reports for factor IC, RankIC, excess return, drawdown, Sharpe, and turnover.
 - Factor backtest with next-trading-day execution, rebalance interval, transaction costs, slippage, stamp tax, suspension handling, and limit-up / limit-down constraints.

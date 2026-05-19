@@ -1,6 +1,6 @@
 import pandas as pd
 
-from quant_data.factors.baseline import FACTOR_COLUMNS, compute_baseline_factors
+from quant_data.factors.baseline import ALL_FACTOR_COLUMNS, FACTOR_COLUMNS, ZSCORE_FACTOR_COLUMNS, compute_baseline_factors
 
 
 def make_factor_frame() -> pd.DataFrame:
@@ -31,10 +31,12 @@ def make_factor_frame() -> pd.DataFrame:
 def test_compute_baseline_factors_returns_expected_columns_and_sorting():
     result = compute_baseline_factors(make_factor_frame())
 
-    assert result.columns.tolist() == ["trade_date", "symbol", *FACTOR_COLUMNS]
+    assert result.columns.tolist() == ["trade_date", "symbol", *ALL_FACTOR_COLUMNS]
     assert result[["symbol", "trade_date"]].equals(
         result[["symbol", "trade_date"]].sort_values(["symbol", "trade_date"]).reset_index(drop=True)
     )
+    for column in ZSCORE_FACTOR_COLUMNS:
+        assert column in result.columns
 
 
 def test_compute_baseline_factors_calculates_twenty_day_momentum_per_symbol():

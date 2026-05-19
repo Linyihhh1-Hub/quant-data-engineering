@@ -1,5 +1,7 @@
 import pandas as pd
 
+from quant_data.factors.preprocessing import add_standardized_factors
+
 FACTOR_COLUMNS = [
     "momentum_20d",
     "reversal_5d",
@@ -7,6 +9,9 @@ FACTOR_COLUMNS = [
     "volume_ratio_5d",
     "ma_bias_20d",
 ]
+WINSORIZED_FACTOR_COLUMNS = [f"{column}_winsorized" for column in FACTOR_COLUMNS]
+ZSCORE_FACTOR_COLUMNS = [f"{column}_zscore" for column in FACTOR_COLUMNS]
+ALL_FACTOR_COLUMNS = [*FACTOR_COLUMNS, *WINSORIZED_FACTOR_COLUMNS, *ZSCORE_FACTOR_COLUMNS]
 
 REQUIRED_COLUMNS = {"trade_date", "symbol", "close", "volume", "return_1d"}
 
@@ -38,4 +43,5 @@ def compute_baseline_factors(frame: pd.DataFrame) -> pd.DataFrame:
         lambda series: series.rolling(window=20, min_periods=20).mean()
     ) - 1
 
-    return result[["trade_date", "symbol", *FACTOR_COLUMNS]]
+    result = add_standardized_factors(result, FACTOR_COLUMNS)
+    return result[["trade_date", "symbol", *ALL_FACTOR_COLUMNS]]

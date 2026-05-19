@@ -7,8 +7,8 @@ param(
 
     [string]$SymbolsFile = "configs/symbols.csv",
     [bool]$BuildHs300Symbols = $false,
-    [string]$FactorName = "momentum_20d",
-    [string]$FactorNames = "momentum_20d,reversal_5d,volatility_20d,volume_ratio_5d,ma_bias_20d",
+    [string]$FactorName = "momentum_20d_zscore",
+    [string]$FactorNames = "momentum_20d,reversal_5d,volatility_20d,volume_ratio_5d,ma_bias_20d,momentum_20d_zscore,reversal_5d_zscore,volatility_20d_zscore,volume_ratio_5d_zscore,ma_bias_20d_zscore",
     [int]$Groups = 5,
     [int]$MinRowsPerDate = 20,
     [double]$AbnormalReturnThreshold = 0.25,
