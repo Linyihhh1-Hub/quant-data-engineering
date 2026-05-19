@@ -95,6 +95,55 @@ Run the one-command local pipeline:
 .\scripts\run_daily_pipeline.ps1 -StartDate 20240101 -EndDate 20241231
 ```
 
+### CLI Pipeline Flow
+
+The CLI connects independent modules into an executable data pipeline. Each stage reads the previous stage's Parquet output and writes the next layer of results.
+
+The recommended daily entrypoint is the one-command PowerShell script:
+
+```powershell
+.\scripts\run_daily_pipeline.ps1 `
+  -StartDate 20240101 `
+  -EndDate 20241231
+```
+
+The script runs the main stages in order:
+
+```text
+incremental ingestion
+-> DWD cleaning
+-> data quality checks
+-> factor calculation
+-> factor evaluation
+-> backtest
+-> optional ClickHouse loading
+```
+
+To run the pipeline with sentiment-timing backtest parameters:
+
+```powershell
+.\scripts\run_daily_pipeline.ps1 `
+  -StartDate 20240101 `
+  -EndDate 20241231 `
+  -SentimentThreshold 0 `
+  -WeakSentimentExposure 0.3 `
+  -NormalExposure 1.0
+```
+
+ClickHouse loading is enabled when a password is available. You can set it in the current PowerShell session:
+
+```powershell
+$env:CLICKHOUSE_PASSWORD = "<your-clickhouse-password>"
+```
+
+Or create a local `.env` file in the project root:
+
+```text
+CLICKHOUSE_PASSWORD=<your-clickhouse-password>
+```
+
+The `.env` file is ignored by Git and should not be committed.
+
 Launch the dashboard:
 
 ```powershell
