@@ -1,6 +1,16 @@
 # Quant Data Engineering
 
-Local A-share quant data engineering project for building layered market datasets, quality checks, factor tables, and simple backtest datasets.
+Local A-share quant data engineering project that connects market data ingestion, layered Parquet datasets, quality checks, factor computation, factor evaluation, backtesting, ClickHouse loading, and a Streamlit dashboard.
+
+## Highlights
+
+- End-to-end ODS-DWD-ADS data pipeline for A-share daily market data.
+- AkShare ingestion with stock pools, retry, incremental updates, and ingestion logs.
+- Data quality checks for primary keys, required fields, price validity, volume validity, date completeness, and abnormal returns.
+- Baseline price-volume factors plus market sentiment factors.
+- IC, RankIC, grouped return, and Top-Bottom factor evaluation.
+- Backtest logic with next-trading-day execution, costs, slippage, stamp tax, suspension, and limit-up/limit-down constraints.
+- ClickHouse loading, query interfaces, Streamlit dashboard, and pytest coverage.
 
 ## Phase 1
 
