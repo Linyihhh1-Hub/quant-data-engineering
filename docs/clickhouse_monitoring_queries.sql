@@ -6,6 +6,8 @@ SELECT 'dim_trade_calendar' AS table_name, count() AS row_count FROM dim_trade_c
 UNION ALL
 SELECT 'dim_stock_basic', count() FROM dim_stock_basic
 UNION ALL
+SELECT 'dim_hs300_index', count() FROM dim_hs300_index
+UNION ALL
 SELECT 'dwd_stock_daily', count() FROM dwd_stock_daily
 UNION ALL
 SELECT 'ads_factor_wide_daily', count() FROM ads_factor_wide_daily
@@ -38,6 +40,13 @@ SELECT
     count() AS stock_count,
     countIf(is_st = 1) AS st_count
 FROM dim_stock_basic;
+
+-- 2.2 Check CSI 300 index benchmark coverage.
+SELECT
+    min(trade_date) AS first_trade_date,
+    max(trade_date) AS latest_trade_date,
+    count() AS row_count
+FROM dim_hs300_index;
 
 -- 3. Check row count by stock.
 SELECT
@@ -150,7 +159,9 @@ SELECT
     gross_portfolio_value,
     portfolio_value,
     benchmark_value,
+    hs300_benchmark_value,
     daily_return,
+    hs300_benchmark_return,
     daily_turnover,
     daily_cost_rate,
     drawdown

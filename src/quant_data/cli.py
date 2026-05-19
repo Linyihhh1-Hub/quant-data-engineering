@@ -15,6 +15,7 @@ from quant_data.factors.baseline import ZSCORE_FACTOR_COLUMNS
 from quant_data.factors.sentiment import compute_market_sentiment
 from quant_data.factors.sentiment import join_market_sentiment
 from quant_data.ingestion.akshare_a_share import ingest_stock_daily
+from quant_data.ingestion.index import write_hs300_index
 from quant_data.ingestion.symbols import load_symbols
 from quant_data.quality.rules import run_quality_checks
 from quant_data.storage.clickhouse import get_client as get_clickhouse_client
@@ -26,6 +27,7 @@ def _output_paths(output_dir: Path, factor_name: str) -> dict[str, Path]:
     return {
         "trade_calendar": output_dir / "dim" / "trade_calendar.parquet",
         "stock_basic": output_dir / "dim" / "stock_basic.parquet",
+        "hs300_index": output_dir / "dim" / "hs300_index.parquet",
         "dwd": output_dir / "dwd" / "stock_daily.parquet",
         "quality": output_dir / "reports" / "data_quality_report.parquet",
         "factors": output_dir / "ads" / "factor_wide_daily.parquet",
@@ -93,6 +95,10 @@ def run_build_hs300_symbols(output_path: Path, filter_st: bool) -> Path:
     return write_hs300_symbol_pool(output_path, filter_st=filter_st)
 
 
+def run_ingest_hs300_index(output_dir: Path, start_date: str, end_date: str) -> Path:
+    return write_hs300_index(start_date, end_date, _output_paths(output_dir, "factor")["hs300_index"])
+
+
 def run_quality(output_dir: Path, min_rows_per_date: int, abnormal_return_threshold: float) -> Path:
     paths = _output_paths(output_dir, "factor")
     cleaned = read_parquet(paths["dwd"])
@@ -141,6 +147,7 @@ def run_backtest(
     market_sentiment = None
     if sentiment_threshold is not None:
         market_sentiment = read_parquet(paths["market_sentiment"])
+    benchmark_index = read_parquet(paths["hs300_index"]) if paths["hs300_index"].exists() else None
     daily_result, metrics = run_simple_backtest(
         factors,
         cleaned,
@@ -152,6 +159,7 @@ def run_backtest(
         slippage_rate=slippage_rate,
         stamp_tax_rate=stamp_tax_rate,
         market_sentiment=market_sentiment,
+        benchmark_index=benchmark_index,
         sentiment_threshold=sentiment_threshold,
         weak_sentiment_exposure=weak_sentiment_exposure,
         normal_exposure=normal_exposure,
@@ -266,6 +274,11 @@ def build_parser() -> argparse.ArgumentParser:
     hs300_symbols.add_argument("--output", type=Path, default=Path("configs/symbols.csv"))
     hs300_symbols.add_argument("--include-st", action="store_true")
 
+    hs300_index = subparsers.add_parser("ingest-hs300-index")
+    add_common(hs300_index)
+    hs300_index.add_argument("--start-date", required=True)
+    hs300_index.add_argument("--end-date", required=True)
+
     quality = subparsers.add_parser("quality")
     add_common(quality)
     quality.add_argument("--min-rows-per-date", type=int, default=1)
@@ -369,6 +382,8 @@ def main(argv: list[str] | None = None) -> int:
         run_dimensions(args.output_dir, args.start_date, args.end_date)
     elif args.command == "build-hs300-symbols":
         run_build_hs300_symbols(args.output, filter_st=not args.include_st)
+    elif args.command == "ingest-hs300-index":
+        run_ingest_hs300_index(args.output_dir, args.start_date, args.end_date)
     elif args.command == "quality":
         run_quality(args.output_dir, args.min_rows_per_date, args.abnormal_return_threshold)
     elif args.command == "factors":

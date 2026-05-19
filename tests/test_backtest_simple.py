@@ -67,8 +67,10 @@ def test_run_simple_backtest_returns_daily_series_and_metrics():
         "gross_portfolio_value",
         "portfolio_value",
         "benchmark_value",
+        "hs300_benchmark_value",
         "daily_return",
         "benchmark_return",
+        "hs300_benchmark_return",
         "drawdown",
         "positions_count",
         "target_exposure",
@@ -83,6 +85,9 @@ def test_run_simple_backtest_returns_daily_series_and_metrics():
         "cost_drag",
         "cost_return_ratio",
         "annualized_return",
+        "equal_weight_total_return",
+        "hs300_total_return",
+        "hs300_excess_return",
         "max_drawdown",
         "sharpe",
         "turnover",
@@ -206,6 +211,33 @@ def test_run_simple_backtest_reduces_exposure_when_sentiment_is_weak():
     assert result.loc[2, "target_exposure"] == 1.0
     assert round(result.loc[1, "daily_return"], 6) == round((11 / 10 - 1) * 0.3, 6)
     assert metrics["average_exposure"] < 1.0
+
+
+def test_run_simple_backtest_adds_hs300_index_benchmark():
+    index_bars = pd.DataFrame(
+        [
+            {"trade_date": "2024-01-01", "close": 100.0},
+            {"trade_date": "2024-01-02", "close": 101.0},
+            {"trade_date": "2024-01-03", "close": 99.0},
+            {"trade_date": "2024-01-04", "close": 102.0},
+            {"trade_date": "2024-01-05", "close": 103.0},
+            {"trade_date": "2024-01-06", "close": 104.0},
+        ]
+    )
+
+    result, metrics = run_simple_backtest(
+        make_backtest_factors(),
+        make_backtest_daily_bars(),
+        "test_factor",
+        top_quantile=0.5,
+        rebalance_interval=1,
+        transaction_cost=0.0,
+        benchmark_index=index_bars,
+    )
+
+    assert "hs300_benchmark_value" in result.columns
+    assert round(result.loc[1, "hs300_benchmark_return"], 6) == 0.01
+    assert "hs300_excess_return" in metrics
 
 
 def test_run_simple_backtest_rejects_weak_exposure_above_normal_exposure():

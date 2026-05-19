@@ -234,12 +234,19 @@ def build_backtest_summary(data_dir: str | Path, factor_name: str) -> dict[str, 
         if not daily.empty and "benchmark_value" in daily.columns
         else 0.0
     )
+    hs300_total_return = (
+        float(daily["hs300_benchmark_value"].iloc[-1] - 1)
+        if not daily.empty and "hs300_benchmark_value" in daily.columns
+        else 0.0
+    )
     total_return = float(metrics.get("total_return", 0.0))
     return {
         "daily": daily,
         "metrics": metrics,
         "benchmark_total_return": benchmark_total_return,
         "excess_return": total_return - benchmark_total_return,
+        "hs300_total_return": hs300_total_return,
+        "hs300_excess_return": total_return - hs300_total_return,
         "cost_assumptions": {
             "commission_rate": 0.0003,
             "stamp_tax_rate": 0.0005,
@@ -443,8 +450,9 @@ def render_backtest_tab(st, data_dir: Path, factor_name: str) -> None:
         st,
         [
             ("策略累计", metrics.get("total_return"), "percent"),
-            ("基准累计", summary["benchmark_total_return"], "percent"),
-            ("超额收益", summary["excess_return"], "percent"),
+            ("等权基准", summary["benchmark_total_return"], "percent"),
+            ("沪深300", summary["hs300_total_return"], "percent"),
+            ("指数超额", summary["hs300_excess_return"], "percent"),
             ("最大回撤", metrics.get("max_drawdown"), "percent"),
             ("Sharpe", metrics.get("sharpe"), "number"),
         ],
@@ -473,7 +481,13 @@ def render_backtest_tab(st, data_dir: Path, factor_name: str) -> None:
     st.subheader("策略净值对比")
     net_value_columns = [
         column
-        for column in ["gross_portfolio_value", "unscaled_portfolio_value", "portfolio_value", "benchmark_value"]
+        for column in [
+            "gross_portfolio_value",
+            "unscaled_portfolio_value",
+            "portfolio_value",
+            "benchmark_value",
+            "hs300_benchmark_value",
+        ]
         if column in chart_frame.columns
     ]
     net_value = chart_frame[net_value_columns].rename(
@@ -481,11 +495,12 @@ def render_backtest_tab(st, data_dir: Path, factor_name: str) -> None:
             "gross_portfolio_value": "成本前策略净值",
             "unscaled_portfolio_value": "未择时估算净值",
             "portfolio_value": "成本后策略净值",
-            "benchmark_value": "基准净值",
+            "benchmark_value": "等权基准净值",
+            "hs300_benchmark_value": "沪深300净值",
         }
     )
     st.line_chart(net_value)
-    st.caption("净值图包含：成本前策略净值、成本后策略净值、基准净值，用于观察交易成本对策略表现的侵蚀。")
+    st.caption("净值图包含：成本前策略净值、成本后策略净值、等权基准净值、沪深300净值，用于观察成本侵蚀和指数超额。")
 
     st.subheader("回撤曲线")
     if "drawdown" in chart_frame.columns:

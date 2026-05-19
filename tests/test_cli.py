@@ -68,6 +68,9 @@ def test_cli_run_all_writes_pipeline_outputs(tmp_path):
         "cost_drag",
         "cost_return_ratio",
         "annualized_return",
+        "equal_weight_total_return",
+        "hs300_total_return",
+        "hs300_excess_return",
         "max_drawdown",
         "sharpe",
         "turnover",
@@ -422,3 +425,22 @@ def test_cli_build_hs300_symbols_writes_config(monkeypatch, tmp_path):
 
     assert exit_code == 0
     assert calls == {"output": str(tmp_path / "symbols.csv"), "filter_st": True}
+
+
+def test_cli_ingest_hs300_index_writes_dim_file(monkeypatch, tmp_path):
+    calls = {}
+
+    def fake_write_hs300_index(start_date: str, end_date: str, output_path):
+        calls["args"] = (start_date, end_date, str(output_path))
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        pd.DataFrame({"trade_date": [pd.Timestamp("2020-01-02")], "symbol": ["000300.SH"], "close": [100.0]}).to_parquet(
+            output_path, index=False
+        )
+        return output_path
+
+    monkeypatch.setattr("quant_data.cli.write_hs300_index", fake_write_hs300_index)
+
+    exit_code = main(["ingest-hs300-index", "--start-date", "20200101", "--end-date", "20241231", "--output-dir", str(tmp_path)])
+
+    assert exit_code == 0
+    assert calls["args"] == ("20200101", "20241231", str(tmp_path / "dim" / "hs300_index.parquet"))

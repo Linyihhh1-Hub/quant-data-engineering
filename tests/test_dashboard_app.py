@@ -83,6 +83,7 @@ def write_dashboard_fixture(root):
                 "gross_portfolio_value": 1.0,
                 "portfolio_value": 1.0,
                 "benchmark_value": 1.0,
+                "hs300_benchmark_value": 1.0,
                 "drawdown": 0.0,
                 "target_exposure": 1.0,
             },
@@ -91,6 +92,7 @@ def write_dashboard_fixture(root):
                 "gross_portfolio_value": 1.12,
                 "portfolio_value": 1.1,
                 "benchmark_value": 1.05,
+                "hs300_benchmark_value": 1.03,
                 "daily_return": 0.03,
                 "drawdown": -0.03,
                 "target_exposure": 0.3,
@@ -102,6 +104,8 @@ def write_dashboard_fixture(root):
         "gross_total_return": 0.12,
         "cost_drag": 0.02,
         "cost_return_ratio": 0.18,
+        "hs300_total_return": 0.03,
+        "hs300_excess_return": 0.07,
         "annualized_return": 0.2,
         "max_drawdown": -0.03,
         "sharpe": 1.5,
@@ -227,6 +231,8 @@ def test_build_backtest_summary_reads_daily_result_and_metrics(tmp_path):
     assert summary["metrics"]["total_return"] == 0.1
     assert round(summary["benchmark_total_return"], 6) == 0.05
     assert round(summary["excess_return"], 6) == 0.05
+    assert round(summary["hs300_total_return"], 6) == 0.03
+    assert round(summary["hs300_excess_return"], 6) == 0.07
     assert summary["metrics"]["average_exposure"] == 0.65
     assert "unscaled_portfolio_value" in summary["daily"].columns
     assert summary["daily"]["target_exposure"].tolist() == [1.0, 0.3]

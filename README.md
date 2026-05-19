@@ -58,7 +58,7 @@ Streamlit dashboard
 - Cross-sectional factor preprocessing with 1% / 99% winsorization and daily z-score standardization.
 - Multi-factor evaluation with IC, RankIC, positive IC ratio, ICIR, grouped returns, and long-short return.
 - Yearly and rolling-window stability reports for factor IC, RankIC, excess return, drawdown, Sharpe, and turnover.
-- Factor backtest with next-trading-day execution, rebalance interval, before-cost / after-cost net values, transaction costs, slippage, stamp tax, suspension handling, and limit-up / limit-down constraints.
+- Factor backtest with next-trading-day execution, rebalance interval, before-cost / after-cost net values, equal-weight and CSI 300 benchmarks, transaction costs, slippage, stamp tax, suspension handling, and limit-up / limit-down constraints.
 - ClickHouse loading and query interface for local analytical use.
 - Streamlit dashboard with data pipeline overview, factor evaluation, and strategy backtest performance.
 - Pytest coverage for core pipeline behavior using small fixture datasets.
@@ -168,6 +168,7 @@ data/ods/stock_daily.parquet
 data/dwd/stock_daily.parquet
 data/dim/trade_calendar.parquet
 data/dim/stock_basic.parquet
+data/dim/hs300_index.parquet
 data/reports/ingestion_report.parquet
 data/reports/ingestion_runs.parquet
 data/reports/data_quality_report.parquet
@@ -185,6 +186,7 @@ When ClickHouse loading is enabled, the main analytical tables are:
 ```text
 dim_trade_calendar
 dim_stock_basic
+dim_hs300_index
 dwd_stock_daily
 ads_factor_wide_daily
 ads_market_sentiment_daily

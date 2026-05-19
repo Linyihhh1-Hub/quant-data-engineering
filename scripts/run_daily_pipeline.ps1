@@ -71,19 +71,25 @@ $IngestionReportPath = "data/reports/ingestion_report.parquet"
 $IngestionRunLogPath = "data/reports/ingestion_runs.parquet"
 
 if ($BuildHs300Symbols) {
-    Write-Host "Step 1/5 Build CSI 300 symbol pool"
+    Write-Host "Step 1/6 Build CSI 300 symbol pool"
     & $Python -m quant_data.cli build-hs300-symbols --output $SymbolsFile
 } else {
-    Write-Host "Step 1/5 Use existing symbol pool: $SymbolsFile"
+    Write-Host "Step 1/6 Use existing symbol pool: $SymbolsFile"
 }
 
-Write-Host "Step 2/5 Build dimension tables"
+Write-Host "Step 2/6 Build dimension tables"
 & $Python -m quant_data.cli dimensions `
     --start-date $StartDate `
     --end-date $EndDate `
     --output-dir data
 
-Write-Host "Step 3/5 Ingest A-share daily data"
+Write-Host "Step 3/6 Ingest CSI 300 index benchmark"
+& $Python -m quant_data.cli ingest-hs300-index `
+    --start-date $StartDate `
+    --end-date $EndDate `
+    --output-dir data
+
+Write-Host "Step 4/6 Ingest A-share daily data"
 $IngestArgs = @(
     "-m", "quant_data.cli", "ingest-akshare",
     "--symbols-file", $SymbolsFile,
@@ -102,7 +108,7 @@ if ($Incremental) {
 }
 & $Python @IngestArgs
 
-Write-Host "Step 4/5 Run local data pipeline"
+Write-Host "Step 5/6 Run local data pipeline"
 $RunAllArgs = @(
     "-m", "quant_data.cli", "run-all",
     "--input", $OdsPath,
@@ -145,7 +151,7 @@ if ($null -ne $SentimentThreshold) {
 & $Python @FactorSuiteArgs
 
 if ($LoadClickHouse -and $ClickHousePassword) {
-    Write-Host "Step 5/5 Load results into ClickHouse"
+    Write-Host "Step 6/6 Load results into ClickHouse"
     & $Python -m quant_data.cli load-clickhouse `
         --output-dir data `
         --factor-name $FactorName `
@@ -155,9 +161,9 @@ if ($LoadClickHouse -and $ClickHousePassword) {
         --password $ClickHousePassword `
         --database $ClickHouseDatabase
 } elseif ($LoadClickHouse) {
-    Write-Warning "Step 5/5 skipped ClickHouse load because ClickHousePassword or CLICKHOUSE_PASSWORD is not set."
+    Write-Warning "Step 6/6 skipped ClickHouse load because ClickHousePassword or CLICKHOUSE_PASSWORD is not set."
 } else {
-    Write-Host "Step 5/5 Skip ClickHouse load"
+    Write-Host "Step 6/6 Skip ClickHouse load"
 }
 
 Write-Host "Print run summary"
@@ -188,6 +194,7 @@ if Path("data/reports/ingestion_report.parquet").exists():
 print_frame_status("ods_stock_daily", "data/ods/stock_daily.parquet", "symbol")
 print_frame_status("dim_trade_calendar", "data/dim/trade_calendar.parquet")
 print_frame_status("dim_stock_basic", "data/dim/stock_basic.parquet", "symbol")
+print_frame_status("dim_hs300_index", "data/dim/hs300_index.parquet")
 print_frame_status("dwd_stock_daily", "data/dwd/stock_daily.parquet", "symbol")
 print_frame_status("factor_wide_daily", "data/ads/factor_wide_daily.parquet", "symbol")
 factor_name = os.environ.get("PIPELINE_FACTOR_NAME", "momentum_20d")

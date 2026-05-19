@@ -98,6 +98,24 @@ def _benchmark_return_for_date(returns: pd.DataFrame, trade_date: pd.Timestamp) 
     return float(day_returns.mean())
 
 
+def _index_return_by_date(index_bars: pd.DataFrame | None) -> dict[pd.Timestamp, float]:
+    if index_bars is None or index_bars.empty:
+        return {}
+    required_columns = {"trade_date", "close"}
+    missing_columns = required_columns - set(index_bars.columns)
+    if missing_columns:
+        missing = ", ".join(sorted(missing_columns))
+        raise ValueError(f"Missing index columns: {missing}")
+    frame = index_bars[["trade_date", "close"]].copy()
+    frame["trade_date"] = pd.to_datetime(frame["trade_date"]).astype("datetime64[ns]")
+    frame = frame.sort_values("trade_date").reset_index(drop=True)
+    frame["index_return"] = frame["close"].pct_change()
+    return {
+        pd.Timestamp(row["trade_date"]): float(row["index_return"])
+        for _, row in frame.dropna(subset=["index_return"]).iterrows()
+    }
+
+
 def _sentiment_by_date(market_sentiment: pd.DataFrame | None) -> dict[pd.Timestamp, float]:
     if market_sentiment is None or market_sentiment.empty:
         return {}
@@ -157,6 +175,7 @@ def run_simple_backtest(
     slippage_rate: float = 0.0,
     stamp_tax_rate: float = 0.0,
     market_sentiment: pd.DataFrame | None = None,
+    benchmark_index: pd.DataFrame | None = None,
     sentiment_threshold: float | None = None,
     weak_sentiment_exposure: float = 0.5,
     normal_exposure: float = 1.0,
@@ -187,11 +206,13 @@ def run_simple_backtest(
     portfolio_value = 1.0
     gross_portfolio_value = 1.0
     benchmark_value = 1.0
+    hs300_benchmark_value = 1.0
     current_positions: set[str] = set()
     total_turnover = 0.0
     total_cost = 0.0
     target_exposure = normal_exposure
     sentiment_scores = _sentiment_by_date(market_sentiment)
+    index_returns = _index_return_by_date(benchmark_index)
     rows = []
 
     for index, trade_date in enumerate(trade_dates):
@@ -240,12 +261,14 @@ def run_simple_backtest(
         raw_portfolio_return = 0.0 if index == 0 else _portfolio_return_for_date(returns, timestamp, current_positions)
         portfolio_return = raw_portfolio_return * target_exposure
         benchmark_return = 0.0 if index == 0 else _benchmark_return_for_date(returns, timestamp)
+        hs300_benchmark_return = 0.0 if index == 0 else index_returns.get(timestamp, 0.0)
 
         # 净值从 1.0 开始，之后每天按组合收益滚动更新。
         if index > 0:
             gross_portfolio_value *= 1 + portfolio_return
             portfolio_value *= 1 + portfolio_return
             benchmark_value *= 1 + benchmark_return
+            hs300_benchmark_value *= 1 + hs300_benchmark_return
 
         rows.append(
             {
@@ -253,8 +276,10 @@ def run_simple_backtest(
                 "gross_portfolio_value": gross_portfolio_value,
                 "portfolio_value": portfolio_value,
                 "benchmark_value": benchmark_value,
+                "hs300_benchmark_value": hs300_benchmark_value,
                 "daily_return": portfolio_return,
                 "benchmark_return": benchmark_return,
+                "hs300_benchmark_return": hs300_benchmark_return,
                 "positions_count": len(current_positions),
                 "target_exposure": target_exposure,
                 "daily_turnover": daily_turnover,
@@ -273,6 +298,11 @@ def run_simple_backtest(
         "cost_drag": gross_total_return - total_return,
         "cost_return_ratio": float(total_cost / abs(gross_total_return)) if gross_total_return != 0 else 0.0,
         "annualized_return": _annualized_return(total_return, len(result)),
+        "equal_weight_total_return": float(result["benchmark_value"].iloc[-1] - 1) if not result.empty else 0.0,
+        "hs300_total_return": float(result["hs300_benchmark_value"].iloc[-1] - 1) if not result.empty else 0.0,
+        "hs300_excess_return": total_return - float(result["hs300_benchmark_value"].iloc[-1] - 1)
+        if not result.empty
+        else 0.0,
         "max_drawdown": float(result["drawdown"].min()) if not result.empty else 0.0,
         "sharpe": _sharpe(result["daily_return"]),
         "turnover": float(total_turnover),
@@ -285,8 +315,10 @@ def run_simple_backtest(
             "gross_portfolio_value",
             "portfolio_value",
             "benchmark_value",
+            "hs300_benchmark_value",
             "daily_return",
             "benchmark_return",
+            "hs300_benchmark_return",
             "drawdown",
             "positions_count",
             "target_exposure",

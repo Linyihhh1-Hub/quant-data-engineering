@@ -132,6 +132,21 @@
 | `exchange` | 交易所，`SZ`、`SH` 或 `BJ` | `SZ` |
 | `is_st` | 是否 ST 股票 | `false` |
 
+## DIM 沪深 300 指数基准
+
+路径：`data/dim/hs300_index.parquet`
+
+| 字段 | 含义 | 示例 |
+| --- | --- | --- |
+| `trade_date` | 指数交易日期 | `2024-01-02` |
+| `symbol` | 指数代码 | `000300.SH` |
+| `open` | 指数开盘点位 | `3400.0` |
+| `high` | 指数最高点位 | `3450.0` |
+| `low` | 指数最低点位 | `3380.0` |
+| `close` | 指数收盘点位 | `3420.0` |
+| `volume` | 指数成交量 | `1000000` |
+| `amount` | 指数成交额，部分接口缺失时填充为 0 | `0` |
+
 ## 数据质量报告
 
 路径：`data/reports/data_quality_report.parquet`
@@ -229,8 +244,10 @@
 | `gross_portfolio_value` | 成本前策略组合净值，初始值为 1.0 | `1.068` |
 | `portfolio_value` | 策略组合净值，初始值为 1.0 | `1.052` |
 | `benchmark_value` | 简化基准净值，当前使用股票池等权收益 | `1.031` |
+| `hs300_benchmark_value` | 沪深 300 指数基准净值 | `1.018` |
 | `daily_return` | 策略组合当日收益率 | `0.004` |
 | `benchmark_return` | 基准当日收益率 | `0.002` |
+| `hs300_benchmark_return` | 沪深 300 指数当日收益率 | `0.001` |
 | `drawdown` | 策略当前回撤，等于 `portfolio_value / 历史最高净值 - 1` | `-0.08` |
 | `positions_count` | 当日持仓股票数量 | `20` |
 | `target_exposure` | 情绪择时后的目标仓位，默认 1.0；低情绪时可降为 0.3、0.5 等 | `0.3` |
@@ -286,6 +303,9 @@
 | `cost_drag` | 成本前累计收益 - 成本后累计收益，用于衡量成本侵蚀 | `0.06` |
 | `cost_return_ratio` | 累计交易成本 / 成本前累计收益绝对值 | `0.18` |
 | `annualized_return` | 年化收益率，按 252 个交易日估算 | `0.28` |
+| `equal_weight_total_return` | 股票池等权基准累计收益率 | `0.18` |
+| `hs300_total_return` | 沪深 300 指数基准累计收益率 | `0.12` |
+| `hs300_excess_return` | 策略相对沪深 300 的超额收益 | `0.13` |
 | `max_drawdown` | 最大回撤，通常为负数 | `-0.12` |
 | `sharpe` | 夏普比率，衡量单位波动下的收益表现 | `1.20` |
 | `turnover` | 调仓换手累计值，越高表示交易越频繁 | `8.0` |
@@ -299,6 +319,7 @@
 | 表名 | 对应本地文件 | 含义 |
 | --- | --- | --- |
 | `dwd_stock_daily` | `data/dwd/stock_daily.parquet` | 清洗后日线行情 |
+| `dim_hs300_index` | `data/dim/hs300_index.parquet` | 沪深 300 指数基准行情 |
 | `ads_factor_wide_daily` | `data/ads/factor_wide_daily.parquet` | 因子宽表 |
 | `ads_market_sentiment_daily` | `data/ads/market_sentiment_daily.parquet` | 市场情绪因子表 |
 | `ads_factor_eval` | `data/ads/factor_eval_<factor_name>.parquet` | 因子评估结果 |
