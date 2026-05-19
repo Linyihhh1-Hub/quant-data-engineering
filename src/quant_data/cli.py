@@ -9,6 +9,7 @@ from quant_data.dimensions.market import write_stock_basic
 from quant_data.dimensions.market import write_trade_calendar
 from quant_data.evaluation.factor import evaluate_factor
 from quant_data.factors.baseline import compute_baseline_factors
+from quant_data.factors.baseline import FACTOR_COLUMNS
 from quant_data.factors.sentiment import compute_market_sentiment
 from quant_data.factors.sentiment import join_market_sentiment
 from quant_data.ingestion.akshare_a_share import ingest_stock_daily
@@ -160,6 +161,47 @@ def run_backtest(
     return daily_path, metrics_path
 
 
+def _parse_factor_names(value: str | None) -> list[str]:
+    if not value:
+        return list(FACTOR_COLUMNS)
+    return [factor.strip() for factor in value.split(",") if factor.strip()]
+
+
+def run_factor_suite(
+    output_dir: Path,
+    factor_names: list[str],
+    horizon: int,
+    groups: int,
+    top_quantile: float,
+    rebalance_interval: int,
+    transaction_cost: float,
+    commission_rate: float,
+    slippage_rate: float,
+    stamp_tax_rate: float,
+    sentiment_threshold: float | None = None,
+    weak_sentiment_exposure: float = 0.5,
+    normal_exposure: float = 1.0,
+) -> list[tuple[Path, Path, Path]]:
+    outputs = []
+    for factor_name in factor_names:
+        evaluation_path = run_evaluate(output_dir, factor_name, horizon, groups)
+        daily_path, metrics_path = run_backtest(
+            output_dir,
+            factor_name,
+            top_quantile,
+            rebalance_interval,
+            transaction_cost,
+            commission_rate,
+            slippage_rate,
+            stamp_tax_rate,
+            sentiment_threshold,
+            weak_sentiment_exposure,
+            normal_exposure,
+        )
+        outputs.append((evaluation_path, daily_path, metrics_path))
+    return outputs
+
+
 def run_load_clickhouse(
     output_dir: Path,
     factor_name: str,
@@ -240,6 +282,21 @@ def build_parser() -> argparse.ArgumentParser:
     backtest.add_argument("--weak-sentiment-exposure", type=float, default=0.5)
     backtest.add_argument("--normal-exposure", type=float, default=1.0)
 
+    factor_suite = subparsers.add_parser("factor-suite")
+    add_common(factor_suite)
+    factor_suite.add_argument("--factor-names")
+    factor_suite.add_argument("--horizon", type=int, default=5)
+    factor_suite.add_argument("--groups", type=int, default=5)
+    factor_suite.add_argument("--top-quantile", type=float, default=0.1)
+    factor_suite.add_argument("--rebalance-interval", type=int, default=20)
+    factor_suite.add_argument("--transaction-cost", type=float, default=0.001)
+    factor_suite.add_argument("--commission-rate", type=float, default=0.0003)
+    factor_suite.add_argument("--slippage-rate", type=float, default=0.0005)
+    factor_suite.add_argument("--stamp-tax-rate", type=float, default=0.0005)
+    factor_suite.add_argument("--sentiment-threshold", type=float)
+    factor_suite.add_argument("--weak-sentiment-exposure", type=float, default=0.5)
+    factor_suite.add_argument("--normal-exposure", type=float, default=1.0)
+
     load_clickhouse = subparsers.add_parser("load-clickhouse")
     add_common(load_clickhouse)
     load_clickhouse.add_argument("--factor-name", default="momentum_20d")
@@ -305,6 +362,22 @@ def main(argv: list[str] | None = None) -> int:
         run_backtest(
             args.output_dir,
             args.factor_name,
+            args.top_quantile,
+            args.rebalance_interval,
+            args.transaction_cost,
+            args.commission_rate,
+            args.slippage_rate,
+            args.stamp_tax_rate,
+            args.sentiment_threshold,
+            args.weak_sentiment_exposure,
+            args.normal_exposure,
+        )
+    elif args.command == "factor-suite":
+        run_factor_suite(
+            args.output_dir,
+            _parse_factor_names(args.factor_names),
+            args.horizon,
+            args.groups,
             args.top_quantile,
             args.rebalance_interval,
             args.transaction_cost,

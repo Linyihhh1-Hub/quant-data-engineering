@@ -5,6 +5,7 @@ import pandas as pd
 from quant_data.dashboard.app import (
     build_backtest_summary,
     build_factor_summary,
+    build_factor_comparison,
     build_pipeline_summary,
     estimate_unscaled_strategy_value,
     interpret_factor_strength,
@@ -107,9 +108,21 @@ def write_dashboard_fixture(root):
     ingestion_report.to_parquet(root / "reports" / "ingestion_report.parquet", index=False)
     quality_report.to_parquet(root / "reports" / "data_quality_report.parquet", index=False)
     evaluation.to_parquet(root / "ads" / "factor_eval_momentum_20d.parquet", index=False)
+    reversal_eval = evaluation.copy()
+    reversal_eval["factor_name"] = "reversal_5d"
+    reversal_eval["ic"] = [0.04, 0.02]
+    reversal_eval["rank_ic"] = [0.03, 0.01]
+    reversal_eval["long_short_return"] = [0.03, 0.02]
+    reversal_eval.to_parquet(root / "ads" / "factor_eval_reversal_5d.parquet", index=False)
     backtest.to_parquet(root / "ads" / "backtest_daily_momentum_20d.parquet", index=False)
+    backtest.to_parquet(root / "ads" / "backtest_daily_reversal_5d.parquet", index=False)
     (root / "ads" / "backtest_metrics_momentum_20d.json").write_text(
         json.dumps(metrics),
+        encoding="utf-8",
+    )
+    reversal_metrics = {**metrics, "total_return": 0.2, "sharpe": 2.0}
+    (root / "ads" / "backtest_metrics_reversal_5d.json").write_text(
+        json.dumps(reversal_metrics),
         encoding="utf-8",
     )
 
@@ -163,7 +176,18 @@ def test_build_backtest_summary_reads_daily_result_and_metrics(tmp_path):
 def test_list_available_factors_uses_factor_eval_files(tmp_path):
     write_dashboard_fixture(tmp_path)
 
-    assert list_available_factors(tmp_path) == ["momentum_20d"]
+    assert list_available_factors(tmp_path) == ["momentum_20d", "reversal_5d"]
+
+
+def test_build_factor_comparison_summarizes_all_available_factors(tmp_path):
+    write_dashboard_fixture(tmp_path)
+
+    comparison = build_factor_comparison(tmp_path)
+
+    assert comparison["factor_name"].tolist() == ["reversal_5d", "momentum_20d"]
+    assert "ic_mean" in comparison.columns
+    assert "excess_return" in comparison.columns
+    assert comparison.loc[0, "total_return"] == 0.2
 
 
 def test_interpret_factor_strength_returns_practical_conclusion():

@@ -299,6 +299,23 @@ data/reports/ingestion_report.parquet
   --normal-exposure 1.0
 ```
 
+批量评估和回测所有基础因子：
+
+```powershell
+.\.venv\Scripts\python.exe -m quant_data.cli factor-suite `
+  --output-dir data `
+  --factor-names momentum_20d,reversal_5d,volatility_20d,volume_ratio_5d,ma_bias_20d `
+  --horizon 5 `
+  --groups 5 `
+  --top-quantile 0.1 `
+  --rebalance-interval 20 `
+  --sentiment-threshold 0 `
+  --weak-sentiment-exposure 0.3 `
+  --normal-exposure 1.0
+```
+
+一键脚本 `scripts/run_daily_pipeline.ps1` 默认也会执行多因子评估和回测，并在 Streamlit 看板里生成多因子对比表。
+
 也可以分阶段运行：
 
 ```powershell

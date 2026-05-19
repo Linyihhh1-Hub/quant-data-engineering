@@ -8,6 +8,7 @@ param(
     [string]$SymbolsFile = "configs/symbols.csv",
     [bool]$BuildHs300Symbols = $false,
     [string]$FactorName = "momentum_20d",
+    [string]$FactorNames = "momentum_20d,reversal_5d,volatility_20d,volume_ratio_5d,ma_bias_20d",
     [int]$Groups = 5,
     [int]$MinRowsPerDate = 20,
     [double]$AbnormalReturnThreshold = 0.25,
@@ -123,6 +124,25 @@ if ($null -ne $SentimentThreshold) {
     )
 }
 & $Python @RunAllArgs
+
+$FactorSuiteArgs = @(
+    "-m", "quant_data.cli", "factor-suite",
+    "--output-dir", "data",
+    "--factor-names", $FactorNames,
+    "--groups", "$Groups",
+    "--transaction-cost", "$TransactionCost",
+    "--commission-rate", "$CommissionRate",
+    "--slippage-rate", "$SlippageRate",
+    "--stamp-tax-rate", "$StampTaxRate"
+)
+if ($null -ne $SentimentThreshold) {
+    $FactorSuiteArgs += @(
+        "--sentiment-threshold", "$SentimentThreshold",
+        "--weak-sentiment-exposure", "$WeakSentimentExposure",
+        "--normal-exposure", "$NormalExposure"
+    )
+}
+& $Python @FactorSuiteArgs
 
 if ($LoadClickHouse -and $ClickHousePassword) {
     Write-Host "Step 5/5 Load results into ClickHouse"

@@ -115,6 +115,32 @@ def list_available_factors(data_dir: str | Path = "data") -> list[str]:
     return factors
 
 
+def build_factor_comparison(data_dir: str | Path = "data") -> pd.DataFrame:
+    rows = []
+    for factor_name in list_available_factors(data_dir):
+        factor_summary = build_factor_summary(data_dir, factor_name)
+        backtest_summary = build_backtest_summary(data_dir, factor_name)
+        metrics = backtest_summary["metrics"]
+        rows.append(
+            {
+                "factor_name": factor_name,
+                "ic_mean": factor_summary["ic_mean"],
+                "rank_ic_mean": factor_summary["rank_ic_mean"],
+                "positive_ic_ratio": factor_summary["positive_ic_ratio"],
+                "icir": factor_summary["icir"],
+                "total_return": float(metrics.get("total_return", 0.0)),
+                "benchmark_total_return": backtest_summary["benchmark_total_return"],
+                "excess_return": backtest_summary["excess_return"],
+                "max_drawdown": float(metrics.get("max_drawdown", 0.0)),
+                "sharpe": float(metrics.get("sharpe", 0.0)),
+                "turnover": float(metrics.get("turnover", 0.0)),
+            }
+        )
+    if not rows:
+        return pd.DataFrame()
+    return pd.DataFrame(rows).sort_values(["excess_return", "ic_mean"], ascending=[False, False]).reset_index(drop=True)
+
+
 def build_factor_summary(data_dir: str | Path, factor_name: str) -> dict[str, object]:
     root = Path(data_dir)
     evaluation = _read_parquet_if_exists(root / "ads" / f"factor_eval_{factor_name}.parquet")
@@ -296,6 +322,19 @@ def render_pipeline_tab(st, data_dir: Path) -> None:
 
 
 def render_factor_tab(st, data_dir: Path, factor_name: str) -> None:
+    comparison = build_factor_comparison(data_dir)
+    if not comparison.empty:
+        st.subheader("多因子对比")
+        display = comparison.copy()
+        percent_columns = ["positive_ic_ratio", "total_return", "benchmark_total_return", "excess_return", "max_drawdown"]
+        for column in percent_columns:
+            if column in display.columns:
+                display[column] = display[column].map(_format_percent)
+        for column in ["ic_mean", "rank_ic_mean", "icir", "sharpe", "turnover"]:
+            if column in display.columns:
+                display[column] = display[column].map(_format_number)
+        st.dataframe(display, use_container_width=True, hide_index=True)
+
     summary = build_factor_summary(data_dir, factor_name)
     evaluation = summary["evaluation"]
     _metric_row(

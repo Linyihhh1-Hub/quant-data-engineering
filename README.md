@@ -199,6 +199,21 @@ Run all local pipeline stages from a raw ODS Parquet file:
   --factor-name momentum_20d
 ```
 
+Run evaluation and backtests for all baseline factors:
+
+```powershell
+.\.venv\Scripts\python.exe -m quant_data.cli factor-suite `
+  --output-dir data `
+  --factor-names momentum_20d,reversal_5d,volatility_20d,volume_ratio_5d,ma_bias_20d `
+  --horizon 5 `
+  --groups 5 `
+  --top-quantile 0.1 `
+  --rebalance-interval 20 `
+  --sentiment-threshold 0 `
+  --weak-sentiment-exposure 0.3 `
+  --normal-exposure 1.0
+```
+
 Stage outputs:
 
 ```text
