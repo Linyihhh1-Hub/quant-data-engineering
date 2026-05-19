@@ -58,15 +58,15 @@ Streamlit dashboard
 
 ## Dashboard Preview
 
-### 数据链路概览
+### Data Pipeline Overview
 
 ![dashboard-overview](docs/images/dashboard_overview.png)
 
-### 因子有效性评估
+### Factor Evaluation
 
 ![factor-evaluation](docs/images/factor_evaluation.png)
 
-### 策略回测表现
+### Backtest Performance
 
 ![backtest-performance](docs/images/backtest_performance.png)
 
