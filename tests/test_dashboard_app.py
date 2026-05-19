@@ -80,6 +80,7 @@ def write_dashboard_fixture(root):
         [
             {
                 "trade_date": pd.Timestamp("2024-01-01"),
+                "gross_portfolio_value": 1.0,
                 "portfolio_value": 1.0,
                 "benchmark_value": 1.0,
                 "drawdown": 0.0,
@@ -87,6 +88,7 @@ def write_dashboard_fixture(root):
             },
             {
                 "trade_date": pd.Timestamp("2024-01-02"),
+                "gross_portfolio_value": 1.12,
                 "portfolio_value": 1.1,
                 "benchmark_value": 1.05,
                 "daily_return": 0.03,
@@ -97,6 +99,9 @@ def write_dashboard_fixture(root):
     )
     metrics = {
         "total_return": 0.1,
+        "gross_total_return": 0.12,
+        "cost_drag": 0.02,
+        "cost_return_ratio": 0.18,
         "annualized_return": 0.2,
         "max_drawdown": -0.03,
         "sharpe": 1.5,

@@ -450,6 +450,14 @@ def render_backtest_tab(st, data_dir: Path, factor_name: str) -> None:
         ],
     )
     _metric_row(st, [("换手", metrics.get("turnover"), "number"), ("平均仓位", metrics.get("average_exposure"), "percent")])
+    _metric_row(
+        st,
+        [
+            ("成本前累计", metrics.get("gross_total_return"), "percent"),
+            ("成本侵蚀", metrics.get("cost_drag"), "percent"),
+            ("成本/收益", metrics.get("cost_return_ratio"), "percent"),
+        ],
+    )
     costs = summary["cost_assumptions"]
     st.caption(
         "成本假设："
@@ -465,18 +473,19 @@ def render_backtest_tab(st, data_dir: Path, factor_name: str) -> None:
     st.subheader("策略净值对比")
     net_value_columns = [
         column
-        for column in ["unscaled_portfolio_value", "portfolio_value", "benchmark_value"]
+        for column in ["gross_portfolio_value", "unscaled_portfolio_value", "portfolio_value", "benchmark_value"]
         if column in chart_frame.columns
     ]
     net_value = chart_frame[net_value_columns].rename(
         columns={
+            "gross_portfolio_value": "成本前策略净值",
             "unscaled_portfolio_value": "未择时估算净值",
-            "portfolio_value": "情绪择时策略净值",
+            "portfolio_value": "成本后策略净值",
             "benchmark_value": "基准净值",
         }
     )
     st.line_chart(net_value)
-    st.caption("净值图包含：未择时估算净值、情绪择时策略净值、基准净值，用于观察情绪择时是否改善策略表现。")
+    st.caption("净值图包含：成本前策略净值、成本后策略净值、基准净值，用于观察交易成本对策略表现的侵蚀。")
 
     st.subheader("回撤曲线")
     if "drawdown" in chart_frame.columns:

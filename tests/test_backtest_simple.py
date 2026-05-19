@@ -64,6 +64,7 @@ def test_run_simple_backtest_returns_daily_series_and_metrics():
 
     assert daily_result.columns.tolist() == [
         "trade_date",
+        "gross_portfolio_value",
         "portfolio_value",
         "benchmark_value",
         "daily_return",
@@ -78,6 +79,9 @@ def test_run_simple_backtest_returns_daily_series_and_metrics():
     assert daily_result.loc[0, "benchmark_value"] == 1.0
     assert {
         "total_return",
+        "gross_total_return",
+        "cost_drag",
+        "cost_return_ratio",
         "annualized_return",
         "max_drawdown",
         "sharpe",

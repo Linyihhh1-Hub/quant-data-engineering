@@ -147,9 +147,12 @@ LIMIT 20;
 -- 10. Inspect the latest backtest net value.
 SELECT
     trade_date,
+    gross_portfolio_value,
     portfolio_value,
     benchmark_value,
     daily_return,
+    daily_turnover,
+    daily_cost_rate,
     drawdown
 FROM ads_backtest_daily
 ORDER BY trade_date DESC

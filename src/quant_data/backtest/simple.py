@@ -185,6 +185,7 @@ def run_simple_backtest(
     rebalance_dates = set(execution_dates.values())
 
     portfolio_value = 1.0
+    gross_portfolio_value = 1.0
     benchmark_value = 1.0
     current_positions: set[str] = set()
     total_turnover = 0.0
@@ -242,12 +243,14 @@ def run_simple_backtest(
 
         # 净值从 1.0 开始，之后每天按组合收益滚动更新。
         if index > 0:
+            gross_portfolio_value *= 1 + portfolio_return
             portfolio_value *= 1 + portfolio_return
             benchmark_value *= 1 + benchmark_return
 
         rows.append(
             {
                 "trade_date": timestamp,
+                "gross_portfolio_value": gross_portfolio_value,
                 "portfolio_value": portfolio_value,
                 "benchmark_value": benchmark_value,
                 "daily_return": portfolio_return,
@@ -263,8 +266,12 @@ def run_simple_backtest(
     result["drawdown"] = _max_drawdown(result["portfolio_value"])
 
     total_return = float(result["portfolio_value"].iloc[-1] - 1) if not result.empty else 0.0
+    gross_total_return = float(result["gross_portfolio_value"].iloc[-1] - 1) if not result.empty else 0.0
     metrics = {
         "total_return": total_return,
+        "gross_total_return": gross_total_return,
+        "cost_drag": gross_total_return - total_return,
+        "cost_return_ratio": float(total_cost / abs(gross_total_return)) if gross_total_return != 0 else 0.0,
         "annualized_return": _annualized_return(total_return, len(result)),
         "max_drawdown": float(result["drawdown"].min()) if not result.empty else 0.0,
         "sharpe": _sharpe(result["daily_return"]),
@@ -275,6 +282,7 @@ def run_simple_backtest(
     return result[
         [
             "trade_date",
+            "gross_portfolio_value",
             "portfolio_value",
             "benchmark_value",
             "daily_return",

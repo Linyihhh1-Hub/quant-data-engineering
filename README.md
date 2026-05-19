@@ -58,7 +58,7 @@ Streamlit dashboard
 - Cross-sectional factor preprocessing with 1% / 99% winsorization and daily z-score standardization.
 - Multi-factor evaluation with IC, RankIC, positive IC ratio, ICIR, grouped returns, and long-short return.
 - Yearly and rolling-window stability reports for factor IC, RankIC, excess return, drawdown, Sharpe, and turnover.
-- Factor backtest with next-trading-day execution, rebalance interval, transaction costs, slippage, stamp tax, suspension handling, and limit-up / limit-down constraints.
+- Factor backtest with next-trading-day execution, rebalance interval, before-cost / after-cost net values, transaction costs, slippage, stamp tax, suspension handling, and limit-up / limit-down constraints.
 - ClickHouse loading and query interface for local analytical use.
 - Streamlit dashboard with data pipeline overview, factor evaluation, and strategy backtest performance.
 - Pytest coverage for core pipeline behavior using small fixture datasets.

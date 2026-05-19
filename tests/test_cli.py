@@ -64,6 +64,9 @@ def test_cli_run_all_writes_pipeline_outputs(tmp_path):
     metrics = json.loads(metrics_path.read_text(encoding="utf-8"))
     assert {
         "total_return",
+        "gross_total_return",
+        "cost_drag",
+        "cost_return_ratio",
         "annualized_return",
         "max_drawdown",
         "sharpe",
