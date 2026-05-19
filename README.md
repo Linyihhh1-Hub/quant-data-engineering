@@ -1,252 +1,128 @@
 # Quant Data Engineering
 
-Local A-share quant data engineering project that connects market data ingestion, layered Parquet datasets, quality checks, factor computation, factor evaluation, backtesting, ClickHouse loading, and a Streamlit dashboard.
+## Project Overview
 
-## Highlights
+Quant Data Engineering is a local A-share quant data engineering project. It builds a reproducible pipeline from market data ingestion to layered datasets, data quality checks, factor calculation, factor evaluation, backtesting, ClickHouse loading, and Streamlit dashboard visualization.
 
-- End-to-end ODS-DWD-ADS data pipeline for A-share daily market data.
-- AkShare ingestion with stock pools, retry, incremental updates, and ingestion logs.
-- Data quality checks for primary keys, required fields, price validity, volume validity, date completeness, and abnormal returns.
-- Baseline price-volume factors plus market sentiment factors.
-- IC, RankIC, grouped return, and Top-Bottom factor evaluation.
-- Backtest logic with next-trading-day execution, costs, slippage, stamp tax, suspension, and limit-up/limit-down constraints.
-- ClickHouse loading, query interfaces, Streamlit dashboard, and pytest coverage.
+The project focuses on the engineering process behind quantitative research: data acquisition, cleaning, validation, storage, query interfaces, and result presentation. It is not a black-box trading signal or production trading system.
 
-## Phase 1
+## Why This Project
 
-Implemented foundation:
+Quant research depends on stable and traceable data pipelines. This project uses a compact local stack to answer several practical questions:
 
-- Python package skeleton
-- YAML config loading
-- Parquet storage helpers
-- DWD daily bar cleaning
-- Unit tests with fixture data
+- Can raw daily market data be ingested and incrementally updated in a repeatable way?
+- Can ODS, DWD, and ADS layers make the data lifecycle easier to inspect?
+- Can quality rules catch missing values, invalid prices, duplicate keys, and abnormal returns before factor research?
+- Can factor IC, RankIC, grouped returns, and backtest results be generated from the same pipeline outputs?
+- Can the final datasets be queried through ClickHouse and reviewed through a lightweight dashboard?
 
-## Development
+## Architecture
 
-Install in editable mode:
+```text
+AkShare / fixture data
+        |
+        v
+ODS raw daily bars
+        |
+        v
+DWD cleaned daily bars + dim tables
+        |
+        v
+Data quality reports
+        |
+        v
+ADS factor wide table + market sentiment table
+        |
+        +--> Factor evaluation: IC / RankIC / grouped returns
+        |
+        +--> Backtest: net value / benchmark / drawdown / metrics
+        |
+        +--> ClickHouse analytical tables
+        |
+        v
+Streamlit dashboard
+```
+
+## Features
+
+- AkShare daily data ingestion with stock pool files, retry, incremental updates, run logs, and fallback handling.
+- Layered Parquet datasets for ODS, DWD, ADS, reports, and dimension tables.
+- Data quality checks for primary key uniqueness, required fields, price validity, volume validity, date completeness, and abnormal returns.
+- Baseline price-volume factors: `momentum_20d`, `reversal_5d`, `volatility_20d`, `volume_ratio_5d`, `ma_bias_20d`.
+- Market sentiment factors such as market breadth, trading activity, profit effect, and rolling sentiment score.
+- Multi-factor evaluation with IC, RankIC, positive IC ratio, ICIR, grouped returns, and long-short return.
+- Factor backtest with next-trading-day execution, rebalance interval, transaction costs, slippage, stamp tax, suspension handling, and limit-up / limit-down constraints.
+- ClickHouse loading and query interface for local analytical use.
+- Streamlit dashboard with data pipeline overview, factor evaluation, and strategy backtest performance.
+- Pytest coverage for core pipeline behavior using small fixture datasets.
+
+## Dashboard Preview
+
+### 数据链路概览
+
+![dashboard-overview](docs/images/dashboard_overview.png)
+
+### 因子有效性评估
+
+![factor-evaluation](docs/images/factor_evaluation.png)
+
+### 策略回测表现
+
+![backtest-performance](docs/images/backtest_performance.png)
+
+## Quick Start
+
+Install the package in editable mode:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install -e ".[dev]"
+python -m pip install -e ".[dev]"
 ```
 
 Run tests:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q
+python -m pytest -q
 ```
 
-Launch the local Streamlit dashboard:
+Run the daily local pipeline:
 
 ```powershell
-.\.venv\Scripts\streamlit.exe run src\quant_data\dashboard\app.py
+.\scripts\run_daily_pipeline.ps1 -StartDate 20240101 -EndDate 20241231
 ```
 
-## Phase 2: Data Quality
-
-Implemented daily market data quality checks:
-
-- `primary_key_unique`: `trade_date + symbol` has no duplicates
-- `required_fields_not_null`: required OHLCV fields are not null
-- `price_valid`: prices are non-negative, `close > 0`, and `high >= low`
-- `volume_valid`: `volume >= 0`
-- `date_completeness`: each trading date has at least the configured number of rows
-- `abnormal_return`: absolute daily return above the configured threshold is reported
-
-Quality report schema:
-
-```text
-rule_name, status, failed_count, failed_sample
-```
-
-## Phase 3: Baseline Factors
-
-Implemented ADS-style factor wide table generation from cleaned daily bars.
-
-Output columns:
-
-```text
-trade_date, symbol, momentum_20d, reversal_5d, volatility_20d, volume_ratio_5d, ma_bias_20d
-```
-
-Factor formulas:
-
-```text
-momentum_20d = close / close.shift(20) - 1
-reversal_5d = -1 * (close / close.shift(5) - 1)
-volatility_20d = rolling_std(return_1d, 20)
-volume_ratio_5d = volume / rolling_mean(volume, 5)
-ma_bias_20d = close / rolling_mean(close, 20) - 1
-```
-
-All rolling calculations are grouped by `symbol` and sorted by `symbol, trade_date`.
-
-## Phase 4: Factor Evaluation
-
-Implemented factor effectiveness evaluation:
-
-- Forward return by symbol: `close.shift(-horizon) / close - 1`
-- IC: cross-sectional Pearson correlation between factor value and forward return
-- RankIC: Pearson correlation between factor rank and forward return rank
-- Grouped returns: compare top group, bottom group, and long-short return
-
-Evaluation report schema:
-
-```text
-trade_date, factor_name, ic, rank_ic, top_group_return, bottom_group_return, long_short_return
-```
-
-## Phase 5: Simple Backtest
-
-Implemented a simple factor-based backtest:
-
-- Select stocks in the top factor quantile on rebalance dates
-- Hold selected stocks with equal weights
-- Apply configurable transaction cost on rebalances after initial position setup
-- Use equal-weight universe return as benchmark
-- Output daily portfolio net value, benchmark net value, daily return, benchmark return, and drawdown
-
-Backtest metrics:
-
-```text
-total_return, annualized_return, max_drawdown, sharpe, turnover, total_cost, average_exposure
-```
-
-## Streamlit Dashboard
-
-The dashboard is implemented in `src/quant_data/dashboard/app.py` and reads local pipeline outputs from the `data` directory.
-
-It provides three focused tabs:
-
-- Data pipeline overview
-- Factor effectiveness evaluation
-- Strategy backtest performance
-
-## CLI Pipeline
-
-Recommended daily run script:
+Launch the dashboard:
 
 ```powershell
-.\scripts\run_daily_pipeline.ps1 `
-  -StartDate 20240101 `
-  -EndDate 20241231
+streamlit run src\quant_data\dashboard\app.py
 ```
 
-The script runs incremental ingestion, local pipeline stages, and ClickHouse load when `CLICKHOUSE_PASSWORD` or `-ClickHousePassword` is provided.
-It also reads a local ignored `.env` file when present:
+For detailed data fields, query examples, and ClickHouse monitoring SQL, see:
+
+- [Chinese data dictionary](docs/data_dictionary.zh-CN.md)
+- [ClickHouse query interface guide](docs/query_interface.zh-CN.md)
+- [ClickHouse monitoring SQL](docs/clickhouse_monitoring_queries.sql)
+- [Chinese README](README.zh-CN.md)
+
+## Output Tables
+
+Local pipeline outputs are written under `data/` by default. The directory is ignored by Git because generated market data can be large and environment-specific.
 
 ```text
-CLICKHOUSE_PASSWORD=<your-clickhouse-password>
-```
-
-To switch the universe to CSI 300 constituents:
-
-```powershell
-.\.venv\Scripts\python.exe -m quant_data.cli build-hs300-symbols `
-  --output configs/symbols.csv
-```
-
-Or let the daily script rebuild the CSI 300 universe:
-
-```powershell
-.\scripts\run_daily_pipeline.ps1 `
-  -StartDate 20240101 `
-  -EndDate 20241231 `
-  -BuildHs300Symbols $true
-```
-
-Fetch real A-share daily data with AkShare:
-
-```powershell
-.\.venv\Scripts\python.exe -m quant_data.cli ingest-akshare `
-  --symbols 000001,600000,600519 `
-  --start-date 20240101 `
-  --end-date 20241231 `
-  --adjust qfq `
-  --output data/ods/stock_daily.parquet
-```
-
-You can also manage the universe with a CSV stock pool:
-
-```powershell
-.\.venv\Scripts\python.exe -m quant_data.cli ingest-akshare `
-  --symbols-file configs/symbols.csv `
-  --start-date 20240101 `
-  --end-date 20241231 `
-  --adjust qfq `
-  --output data/ods/stock_daily.parquet `
-  --report data/reports/ingestion_report.parquet `
-  --retries 3 `
-  --retry-wait-seconds 2 `
-  --incremental `
-  --run-log data/reports/ingestion_runs.parquet
-```
-
-The stock pool file must contain a `symbol` column. The ingestion report records per-symbol status:
-
-```text
-symbol, status, row_count, message
-```
-
-Use `--incremental` to fetch only dates newer than each symbol's latest local ODS record. Use `--run-log` to append one summary row for each ingestion run.
-
-Run all local pipeline stages from a raw ODS Parquet file:
-
-```powershell
-.\.venv\Scripts\python.exe -m quant_data.cli run-all `
-  --input data/ods/stock_daily.parquet `
-  --output-dir data `
-  --factor-name momentum_20d
-```
-
-Run evaluation and backtests for all baseline factors:
-
-```powershell
-.\.venv\Scripts\python.exe -m quant_data.cli factor-suite `
-  --output-dir data `
-  --factor-names momentum_20d,reversal_5d,volatility_20d,volume_ratio_5d,ma_bias_20d `
-  --horizon 5 `
-  --groups 5 `
-  --top-quantile 0.1 `
-  --rebalance-interval 20 `
-  --sentiment-threshold 0 `
-  --weak-sentiment-exposure 0.3 `
-  --normal-exposure 1.0
-```
-
-Stage outputs:
-
-```text
+data/ods/stock_daily.parquet
 data/dwd/stock_daily.parquet
+data/dim/trade_calendar.parquet
+data/dim/stock_basic.parquet
+data/reports/ingestion_report.parquet
+data/reports/ingestion_runs.parquet
 data/reports/data_quality_report.parquet
 data/ads/factor_wide_daily.parquet
+data/ads/market_sentiment_daily.parquet
 data/ads/factor_eval_<factor_name>.parquet
 data/ads/backtest_daily_<factor_name>.parquet
 data/ads/backtest_metrics_<factor_name>.json
 ```
 
-Chinese documentation: [README.zh-CN.md](README.zh-CN.md)
-
-Data dictionary in Chinese: [docs/data_dictionary.zh-CN.md](docs/data_dictionary.zh-CN.md)
-
-Query interface documentation in Chinese: [docs/query_interface.zh-CN.md](docs/query_interface.zh-CN.md)
-
-## ClickHouse Load
-
-Load generated Parquet outputs into local ClickHouse:
-
-```powershell
-.\.venv\Scripts\python.exe -m quant_data.cli load-clickhouse `
-  --output-dir data `
-  --factor-name momentum_20d `
-  --host 127.0.0.1 `
-  --port 8123 `
-  --username default `
-  --password <your-clickhouse-password> `
-  --database quant_data
-```
-
-Created tables:
+When ClickHouse loading is enabled, the main analytical tables are:
 
 ```text
 dim_trade_calendar
@@ -261,4 +137,20 @@ ops_ingestion_runs
 ops_data_quality_report
 ```
 
-Monitoring SQL: [docs/clickhouse_monitoring_queries.sql](docs/clickhouse_monitoring_queries.sql)
+## Tests
+
+The test suite uses small fixture data and does not require live network data.
+
+```powershell
+.\.venv\Scripts\python.exe -m pytest -q
+```
+
+Use live AkShare data only when running ingestion or the daily pipeline in a local environment with network access.
+
+## Limitations
+
+- The backtest is research-oriented and simplified. It is intended to validate factor and data-pipeline behavior, not to represent live trading performance.
+- Live market data depends on AkShare and upstream data-source availability.
+- Generated datasets under `data/` are not committed to Git. A new user needs to run the pipeline locally before using the dashboard.
+- Transaction cost, suspension, and limit-up / limit-down handling are simplified engineering assumptions and should be reviewed before any production use.
+- The dashboard reads local Parquet and JSON outputs. It is designed for local inspection rather than multi-user deployment.
