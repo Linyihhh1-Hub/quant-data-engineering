@@ -32,6 +32,7 @@ def test_run_parameter_sensitivity_outputs_grid_rows():
         factors,
         daily,
         "factor",
+        factor_directions=["top", "bottom"],
         top_quantiles=[0.5, 1.0],
         rebalance_intervals=[1, 2],
         transaction_cost=0.0,
@@ -40,5 +41,14 @@ def test_run_parameter_sensitivity_outputs_grid_rows():
         stamp_tax_rate=0.0,
     )
 
-    assert len(result) == 4
-    assert {"top_quantile", "rebalance_interval", "total_return", "hs300_excess_return"}.issubset(result.columns)
+    assert len(result) == 8
+    assert {
+        "factor_name",
+        "factor_direction",
+        "top_quantile",
+        "rebalance_interval",
+        "sharpe",
+        "turnover",
+        "total_return",
+        "index_excess_return",
+    }.issubset(result.columns)

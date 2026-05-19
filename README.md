@@ -58,8 +58,11 @@ Streamlit dashboard
 - Cross-sectional factor preprocessing with 1% / 99% winsorization and daily z-score standardization.
 - Multi-factor evaluation with IC, RankIC, positive IC ratio, ICIR, grouped returns, and long-short return.
 - Yearly and rolling-window stability reports for factor IC, RankIC, excess return, drawdown, Sharpe, and turnover.
-- Parameter sensitivity analysis across holding quantiles and rebalance intervals to reduce single-parameter overfitting risk.
-- Factor backtest with next-trading-day execution, rebalance interval, before-cost / after-cost net values, equal-weight and CSI 300 benchmarks, transaction costs, slippage, stamp tax, suspension handling, and limit-up / limit-down constraints.
+- Factor-direction validation for both high-factor and low-factor portfolios through `factor_direction = top / bottom`.
+- Holding-buffer backtest logic with `entry_quantile` and `exit_quantile` to reduce unnecessary turnover.
+- Parameter sensitivity analysis across factor direction, holding quantiles, and rebalance intervals to reduce single-parameter overfitting risk.
+- Cost sensitivity analysis across no-cost, low-cost, default-cost, and high-cost assumptions.
+- Factor backtest with next-trading-day execution, rebalance interval, before-cost / after-cost net values, equal-weight and CSI 300 benchmarks, transaction costs, slippage, stamp tax, suspension handling, limit-up / limit-down constraints, and smooth sentiment-based exposure control.
 - ClickHouse loading and query interface for local analytical use.
 - Streamlit dashboard with data pipeline overview, factor evaluation, and strategy backtest performance.
 - Pytest coverage for core pipeline behavior using small fixture datasets.
@@ -119,6 +122,9 @@ incremental ingestion
 -> factor calculation
 -> factor evaluation
 -> backtest
+-> yearly / rolling stability
+-> parameter sensitivity
+-> cost sensitivity
 -> optional ClickHouse loading
 ```
 
@@ -131,6 +137,34 @@ To run the pipeline with sentiment-timing backtest parameters:
   -SentimentThreshold 0 `
   -WeakSentimentExposure 0.3 `
   -NormalExposure 1.0
+```
+
+To run a smoother strategy-diagnostic version with factor direction and holding buffer:
+
+```powershell
+.\scripts\run_daily_pipeline.ps1 `
+  -StartDate 20200101 `
+  -EndDate 20241231 `
+  -FactorName momentum_20d_zscore `
+  -FactorDirection top `
+  -TopQuantile 0.1 `
+  -EntryQuantile 0.1 `
+  -ExitQuantile 0.3 `
+  -RebalanceInterval 20 `
+  -SentimentMode smooth `
+  -MinExposure 0.3 `
+  -MaxExposure 1.0 `
+  -BaseExposure 0.6 `
+  -SentimentScale 0.2 `
+  -SentimentSmoothAlpha 0.2
+```
+
+You can also run diagnostic modules separately:
+
+```powershell
+python -m quant_data.cli backtest --output-dir data --factor-name volatility_20d --factor-direction bottom
+python -m quant_data.cli sensitivity --output-dir data --factor-names momentum_20d,reversal_5d,volatility_20d
+python -m quant_data.cli cost-sensitivity --output-dir data --factor-name momentum_20d_zscore
 ```
 
 ClickHouse loading is enabled when a password is available. You can set it in the current PowerShell session:
@@ -181,6 +215,7 @@ data/ads/backtest_metrics_<factor_name>.json
 data/ads/factor_yearly_summary.parquet
 data/ads/factor_rolling_summary.parquet
 data/ads/parameter_sensitivity.parquet
+data/ads/cost_sensitivity.parquet
 ```
 
 When ClickHouse loading is enabled, the main analytical tables are:
@@ -197,6 +232,7 @@ ads_backtest_daily
 ads_factor_yearly_summary
 ads_factor_rolling_summary
 ads_parameter_sensitivity
+ads_cost_sensitivity
 ops_ingestion_report
 ops_ingestion_runs
 ops_data_quality_report

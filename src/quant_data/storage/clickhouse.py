@@ -73,6 +73,7 @@ def load_pipeline_outputs(client, data_dir: str | Path, factor_name: str) -> dic
         "ads_factor_yearly_summary": root / "ads" / "factor_yearly_summary.parquet",
         "ads_factor_rolling_summary": root / "ads" / "factor_rolling_summary.parquet",
         "ads_parameter_sensitivity": root / "ads" / "parameter_sensitivity.parquet",
+        "ads_cost_sensitivity": root / "ads" / "cost_sensitivity.parquet",
         "ops_ingestion_report": root / "reports" / "ingestion_report.parquet",
         "ops_ingestion_runs": root / "reports" / "ingestion_runs.parquet",
         "ops_data_quality_report": root / "reports" / "data_quality_report.parquet",

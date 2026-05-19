@@ -77,7 +77,11 @@ def test_cli_run_all_writes_pipeline_outputs(tmp_path):
         "turnover",
         "total_cost",
         "average_exposure",
-    } == set(metrics)
+        "factor_direction",
+        "entry_quantile",
+        "exit_quantile",
+        "average_turnover_per_rebalance",
+    }.issubset(metrics)
 
 
 def test_cli_run_all_supports_sentiment_timing_backtest(tmp_path):
@@ -262,6 +266,8 @@ def test_cli_sensitivity_writes_parameter_grid(tmp_path):
             "0.5,1.0",
             "--rebalance-intervals",
             "5,10",
+            "--factor-directions",
+            "top",
         ]
     )
 

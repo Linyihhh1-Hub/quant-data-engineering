@@ -4,6 +4,7 @@ import pandas as pd
 
 from quant_data.dashboard.app import (
     build_backtest_summary,
+    build_cost_sensitivity,
     build_factor_summary,
     build_factor_comparison,
     build_pipeline_summary,
@@ -183,16 +184,33 @@ def write_dashboard_fixture(root):
         [
             {
                 "factor_name": "momentum_20d",
+                "factor_direction": "top",
                 "top_quantile": 0.1,
                 "rebalance_interval": 20,
                 "total_return": 0.1,
-                "hs300_excess_return": 0.07,
+                "excess_return": 0.05,
+                "index_excess_return": 0.07,
                 "sharpe": 1.5,
                 "max_drawdown": -0.03,
+                "turnover": 2.0,
+                "total_cost": 0.01,
+            }
+        ]
+    )
+    cost_sensitivity = pd.DataFrame(
+        [
+            {
+                "factor_name": "momentum_20d",
+                "factor_direction": "top",
+                "cost_scenario": "default_cost",
+                "total_return": 0.1,
+                "cost_drag": 0.02,
+                "sharpe": 1.5,
             }
         ]
     )
     sensitivity.to_parquet(root / "ads" / "parameter_sensitivity.parquet", index=False)
+    cost_sensitivity.to_parquet(root / "ads" / "cost_sensitivity.parquet", index=False)
     backtest.to_parquet(root / "ads" / "backtest_daily_momentum_20d.parquet", index=False)
     backtest.to_parquet(root / "ads" / "backtest_daily_reversal_5d.parquet", index=False)
     (root / "ads" / "backtest_metrics_momentum_20d.json").write_text(
@@ -274,6 +292,8 @@ def test_build_factor_comparison_summarizes_all_available_factors(tmp_path):
     assert comparison["factor_name"].tolist() == ["reversal_5d", "momentum_20d"]
     assert "ic_mean" in comparison.columns
     assert "excess_return" in comparison.columns
+    assert "factor_direction" in comparison.columns
+    assert "cost_to_return" in comparison.columns
     assert comparison.loc[0, "total_return"] == 0.2
 
 
@@ -303,6 +323,16 @@ def test_build_parameter_sensitivity_filters_selected_factor(tmp_path):
 
     assert result["factor_name"].tolist() == ["momentum_20d"]
     assert result.loc[0, "top_quantile"] == 0.1
+    assert result.loc[0, "factor_direction"] == "top"
+
+
+def test_build_cost_sensitivity_filters_selected_factor(tmp_path):
+    write_dashboard_fixture(tmp_path)
+
+    result = build_cost_sensitivity(tmp_path, "momentum_20d")
+
+    assert result["factor_name"].tolist() == ["momentum_20d"]
+    assert result.loc[0, "cost_scenario"] == "default_cost"
 
 
 def test_interpret_factor_strength_returns_practical_conclusion():

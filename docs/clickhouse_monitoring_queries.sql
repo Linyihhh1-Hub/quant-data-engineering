@@ -24,6 +24,8 @@ SELECT 'ads_factor_rolling_summary', count() FROM ads_factor_rolling_summary
 UNION ALL
 SELECT 'ads_parameter_sensitivity', count() FROM ads_parameter_sensitivity
 UNION ALL
+SELECT 'ads_cost_sensitivity', count() FROM ads_cost_sensitivity
+UNION ALL
 SELECT 'ops_ingestion_report', count() FROM ops_ingestion_report
 UNION ALL
 SELECT 'ops_ingestion_runs', count() FROM ops_ingestion_runs
@@ -145,19 +147,40 @@ LIMIT 50;
 -- 9.3 Inspect parameter sensitivity grid.
 SELECT
     factor_name,
+    factor_direction,
     top_quantile,
     rebalance_interval,
     total_return,
     gross_total_return,
-    hs300_excess_return,
+    excess_return,
+    index_excess_return,
     sharpe,
     max_drawdown,
     turnover,
+    total_cost,
     cost_drag
 FROM ads_parameter_sensitivity
-ORDER BY factor_name, top_quantile, rebalance_interval;
+ORDER BY sharpe DESC, excess_return DESC
+LIMIT 20;
 
--- 9.4 Inspect recent market sentiment values.
+-- 9.4 Inspect cost sensitivity scenarios.
+SELECT
+    factor_name,
+    factor_direction,
+    cost_scenario,
+    commission,
+    stamp_tax,
+    slippage,
+    total_return,
+    before_cost_total_return,
+    cost_drag,
+    cost_to_return,
+    sharpe,
+    turnover
+FROM ads_cost_sensitivity
+ORDER BY factor_name, cost_scenario;
+
+-- 9.5 Inspect recent market sentiment values.
 SELECT
     trade_date,
     market_up_ratio,

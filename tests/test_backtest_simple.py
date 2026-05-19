@@ -4,6 +4,7 @@ import pytest
 from quant_data.backtest.simple import (
     compute_daily_returns,
     run_simple_backtest,
+    select_buffered_symbols,
     select_top_symbols,
 )
 
@@ -42,6 +43,33 @@ def test_select_top_symbols_selects_highest_factor_values():
     assert result == ["600001.SH", "600000.SH"]
 
 
+def test_select_top_symbols_supports_bottom_direction():
+    snapshot = make_backtest_factors()
+    snapshot = snapshot[snapshot["trade_date"] == pd.Timestamp("2024-01-01")]
+
+    result = select_top_symbols(snapshot, "test_factor", top_quantile=0.5, factor_direction="bottom")
+
+    assert result == ["000001.SZ", "000002.SZ"]
+
+
+def test_select_buffered_symbols_keeps_positions_until_exit_band():
+    snapshot = pd.DataFrame(
+        [
+            {"trade_date": "2024-01-01", "symbol": "A", "factor": 5.0},
+            {"trade_date": "2024-01-01", "symbol": "B", "factor": 4.0},
+            {"trade_date": "2024-01-01", "symbol": "C", "factor": 3.0},
+            {"trade_date": "2024-01-01", "symbol": "D", "factor": 2.0},
+            {"trade_date": "2024-01-01", "symbol": "E", "factor": 1.0},
+        ]
+    )
+
+    kept = select_buffered_symbols(snapshot, "factor", {"C"}, top_quantile=0.2, entry_quantile=0.2, exit_quantile=0.6)
+    replaced = select_buffered_symbols(snapshot, "factor", {"E"}, top_quantile=0.2, entry_quantile=0.2, exit_quantile=0.6)
+
+    assert kept == {"C"}
+    assert replaced == {"A"}
+
+
 def test_compute_daily_returns_calculates_per_symbol_returns():
     result = compute_daily_returns(make_backtest_daily_bars())
     pingan = result[result["symbol"] == "000001.SZ"].reset_index(drop=True)
@@ -73,7 +101,11 @@ def test_run_simple_backtest_returns_daily_series_and_metrics():
         "hs300_benchmark_return",
         "drawdown",
         "positions_count",
+        "factor_direction",
+        "market_sentiment_score",
+        "raw_target_exposure",
         "target_exposure",
+        "sentiment_mode",
         "daily_turnover",
         "daily_cost_rate",
     ]
@@ -84,6 +116,7 @@ def test_run_simple_backtest_returns_daily_series_and_metrics():
         "gross_total_return",
         "cost_drag",
         "cost_return_ratio",
+        "cost_to_return",
         "annualized_return",
         "equal_weight_total_return",
         "hs300_total_return",
@@ -92,8 +125,21 @@ def test_run_simple_backtest_returns_daily_series_and_metrics():
         "sharpe",
         "turnover",
         "total_cost",
+        "factor_direction",
+        "entry_quantile",
+        "exit_quantile",
+        "average_holding_count",
+        "rebalance_count",
+        "average_turnover_per_rebalance",
+        "sentiment_mode",
+        "min_exposure",
+        "max_exposure",
+        "base_exposure",
+        "sentiment_scale",
+        "sentiment_smooth_alpha",
         "average_exposure",
-    } == set(metrics)
+        "exposure_turnover",
+    }.issubset(metrics)
 
 
 def test_run_simple_backtest_applies_selected_portfolio_returns():
@@ -211,6 +257,53 @@ def test_run_simple_backtest_reduces_exposure_when_sentiment_is_weak():
     assert result.loc[2, "target_exposure"] == 1.0
     assert round(result.loc[1, "daily_return"], 6) == round((11 / 10 - 1) * 0.3, 6)
     assert metrics["average_exposure"] < 1.0
+
+
+def test_run_simple_backtest_smooth_sentiment_exposure_is_bounded_and_less_jumpy():
+    daily = pd.DataFrame(
+        [
+            {"trade_date": "2024-01-01", "symbol": "000001.SZ", "close": 10.0},
+            {"trade_date": "2024-01-02", "symbol": "000001.SZ", "close": 11.0},
+            {"trade_date": "2024-01-03", "symbol": "000001.SZ", "close": 12.0},
+            {"trade_date": "2024-01-04", "symbol": "000001.SZ", "close": 13.0},
+        ]
+    )
+    factors = pd.DataFrame(
+        [
+            {"trade_date": "2024-01-01", "symbol": "000001.SZ", "test_factor": 1.0},
+            {"trade_date": "2024-01-02", "symbol": "000001.SZ", "test_factor": 1.0},
+            {"trade_date": "2024-01-03", "symbol": "000001.SZ", "test_factor": 1.0},
+        ]
+    )
+    sentiment = pd.DataFrame(
+        [
+            {"trade_date": "2024-01-01", "market_sentiment_score": -10.0},
+            {"trade_date": "2024-01-02", "market_sentiment_score": 10.0},
+            {"trade_date": "2024-01-03", "market_sentiment_score": -10.0},
+        ]
+    )
+
+    result, metrics = run_simple_backtest(
+        factors,
+        daily,
+        "test_factor",
+        top_quantile=1.0,
+        rebalance_interval=1,
+        transaction_cost=0.0,
+        market_sentiment=sentiment,
+        sentiment_mode="smooth",
+        min_exposure=0.3,
+        max_exposure=1.0,
+        base_exposure=0.6,
+        sentiment_scale=0.2,
+        sentiment_smooth_alpha=0.2,
+    )
+
+    exposures = result["target_exposure"].dropna()
+    raw = result["raw_target_exposure"].dropna()
+    assert exposures.between(0.3, 1.0).all()
+    assert exposures.diff().abs().max() <= raw.diff().abs().max()
+    assert metrics["sentiment_mode"] == "smooth"
 
 
 def test_run_simple_backtest_adds_hs300_index_benchmark():

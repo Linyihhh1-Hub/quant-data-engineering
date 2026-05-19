@@ -131,6 +131,9 @@ def build_factor_comparison(data_dir: str | Path = "data") -> pd.DataFrame:
         rows.append(
             {
                 "factor_name": factor_name,
+                "factor_direction": metrics.get("factor_direction", "top"),
+                "top_quantile": float(metrics.get("top_quantile", 0.0)),
+                "rebalance_interval": int(metrics.get("rebalance_interval", 0)),
                 "ic_mean": factor_summary["ic_mean"],
                 "rank_ic_mean": factor_summary["rank_ic_mean"],
                 "positive_ic_ratio": factor_summary["positive_ic_ratio"],
@@ -141,11 +144,14 @@ def build_factor_comparison(data_dir: str | Path = "data") -> pd.DataFrame:
                 "max_drawdown": float(metrics.get("max_drawdown", 0.0)),
                 "sharpe": float(metrics.get("sharpe", 0.0)),
                 "turnover": float(metrics.get("turnover", 0.0)),
+                "total_cost": float(metrics.get("total_cost", 0.0)),
+                "cost_drag": float(metrics.get("cost_drag", 0.0)),
+                "cost_to_return": float(metrics.get("cost_to_return", metrics.get("cost_return_ratio", 0.0))),
             }
         )
     if not rows:
         return pd.DataFrame()
-    return pd.DataFrame(rows).sort_values(["excess_return", "ic_mean"], ascending=[False, False]).reset_index(drop=True)
+    return pd.DataFrame(rows).sort_values(["sharpe", "excess_return"], ascending=[False, False]).reset_index(drop=True)
 
 
 def build_factor_summary(data_dir: str | Path, factor_name: str) -> dict[str, object]:
@@ -201,6 +207,19 @@ def build_rolling_summary(data_dir: str | Path, factor_name: str) -> pd.DataFram
 def build_parameter_sensitivity(data_dir: str | Path, factor_name: str) -> pd.DataFrame:
     root = Path(data_dir)
     sensitivity = _read_parquet_if_exists(root / "ads" / "parameter_sensitivity.parquet")
+    if sensitivity.empty or "factor_name" not in sensitivity.columns:
+        return pd.DataFrame()
+    result = sensitivity[sensitivity["factor_name"] == factor_name].copy()
+    sort_columns = [column for column in ["sharpe", "excess_return", "max_drawdown", "turnover"] if column in result.columns]
+    if sort_columns:
+        ascending = [False if column != "turnover" else True for column in sort_columns]
+        result = result.sort_values(sort_columns, ascending=ascending)
+    return result.head(20).reset_index(drop=True)
+
+
+def build_cost_sensitivity(data_dir: str | Path, factor_name: str) -> pd.DataFrame:
+    root = Path(data_dir)
+    sensitivity = _read_parquet_if_exists(root / "ads" / "cost_sensitivity.parquet")
     if sensitivity.empty or "factor_name" not in sensitivity.columns:
         return pd.DataFrame()
     return sensitivity[sensitivity["factor_name"] == factor_name].reset_index(drop=True)
@@ -371,14 +390,45 @@ def render_factor_tab(st, data_dir: Path, factor_name: str) -> None:
     if not comparison.empty:
         st.subheader("多因子对比")
         display = comparison.copy()
-        percent_columns = ["positive_ic_ratio", "total_return", "benchmark_total_return", "excess_return", "max_drawdown"]
+        percent_columns = [
+            "positive_ic_ratio",
+            "total_return",
+            "benchmark_total_return",
+            "excess_return",
+            "max_drawdown",
+            "total_cost",
+            "cost_drag",
+            "cost_to_return",
+        ]
         for column in percent_columns:
             if column in display.columns:
                 display[column] = display[column].map(_format_percent)
-        for column in ["ic_mean", "rank_ic_mean", "icir", "sharpe", "turnover"]:
+        for column in ["top_quantile", "ic_mean", "rank_ic_mean", "icir", "sharpe", "turnover"]:
             if column in display.columns:
                 display[column] = display[column].map(_format_number)
-        st.dataframe(display, use_container_width=True, hide_index=True)
+        columns = [
+            column
+            for column in [
+                "factor_name",
+                "factor_direction",
+                "top_quantile",
+                "rebalance_interval",
+                "ic_mean",
+                "rank_ic_mean",
+                "positive_ic_ratio",
+                "icir",
+                "total_return",
+                "excess_return",
+                "max_drawdown",
+                "sharpe",
+                "turnover",
+                "total_cost",
+                "cost_drag",
+                "cost_to_return",
+            ]
+            if column in display.columns
+        ]
+        st.dataframe(display[columns], use_container_width=True, hide_index=True)
 
     summary = build_factor_summary(data_dir, factor_name)
     evaluation = summary["evaluation"]
@@ -461,6 +511,10 @@ def render_backtest_tab(st, data_dir: Path, factor_name: str) -> None:
     summary = build_backtest_summary(data_dir, factor_name)
     daily = summary["daily"]
     metrics = summary["metrics"]
+    st.info(
+        "策略诊断需要同时看：是否跑赢沪深300、是否跑赢股票池等权基准、成本前后收益差异、"
+        "换手率与成本侵蚀、最大回撤和 Sharpe。"
+    )
     _metric_row(
         st,
         [
@@ -478,7 +532,7 @@ def render_backtest_tab(st, data_dir: Path, factor_name: str) -> None:
         [
             ("成本前累计", metrics.get("gross_total_return"), "percent"),
             ("成本侵蚀", metrics.get("cost_drag"), "percent"),
-            ("成本/收益", metrics.get("cost_return_ratio"), "percent"),
+            ("成本/收益", metrics.get("cost_to_return", metrics.get("cost_return_ratio")), "percent"),
         ],
     )
     costs = summary["cost_assumptions"]
@@ -525,7 +579,11 @@ def render_backtest_tab(st, data_dir: Path, factor_name: str) -> None:
 
     if "target_exposure" in chart_frame.columns:
         st.subheader("情绪择时仓位")
-        st.line_chart(chart_frame[["target_exposure"]])
+        exposure_columns = [column for column in ["raw_target_exposure", "target_exposure"] if column in chart_frame.columns]
+        exposure_chart = chart_frame[exposure_columns].rename(
+            columns={"raw_target_exposure": "平滑前目标仓位", "target_exposure": "实际目标仓位"}
+        )
+        st.line_chart(exposure_chart)
 
     st.subheader("参数敏感性")
     sensitivity = build_parameter_sensitivity(data_dir, factor_name)
@@ -541,12 +599,58 @@ def render_backtest_tab(st, data_dir: Path, factor_name: str) -> None:
         percent_columns = [
             "total_return",
             "gross_total_return",
-            "equal_weight_total_return",
-            "hs300_total_return",
-            "hs300_excess_return",
+            "benchmark_total_return",
+            "index_total_return",
+            "excess_return",
+            "index_excess_return",
             "max_drawdown",
             "total_cost",
             "cost_drag",
+            "cost_to_return",
+        ]
+        for column in percent_columns:
+            if column in display.columns:
+                display[column] = display[column].map(_format_percent)
+        for column in ["top_quantile", "rebalance_interval", "sharpe", "turnover"]:
+            if column in display.columns:
+                display[column] = display[column].map(_format_number)
+        columns = [
+            column
+            for column in [
+                "factor_name",
+                "factor_direction",
+                "top_quantile",
+                "rebalance_interval",
+                "total_return",
+                "excess_return",
+                "max_drawdown",
+                "sharpe",
+                "turnover",
+                "total_cost",
+            ]
+            if column in display.columns
+        ]
+        st.caption("默认展示按 Sharpe、超额收益、回撤、换手排序后的 Top 20 参数组合。")
+        st.dataframe(display[columns], use_container_width=True, hide_index=True)
+
+    st.subheader("成本敏感性")
+    cost_sensitivity = build_cost_sensitivity(data_dir, factor_name)
+    if cost_sensitivity.empty:
+        st.info("未找到成本敏感性结果，请先运行 cost-sensitivity 或 run-all 命令。")
+    else:
+        chart_columns = [column for column in ["cost_scenario", "total_return"] if column in cost_sensitivity.columns]
+        if len(chart_columns) == 2:
+            st.bar_chart(cost_sensitivity.set_index("cost_scenario")[["total_return"]])
+        display = cost_sensitivity.copy()
+        percent_columns = [
+            "commission",
+            "stamp_tax",
+            "slippage",
+            "total_return",
+            "before_cost_total_return",
+            "cost_drag",
+            "cost_to_return",
+            "max_drawdown",
         ]
         for column in percent_columns:
             if column in display.columns:
@@ -554,7 +658,25 @@ def render_backtest_tab(st, data_dir: Path, factor_name: str) -> None:
         for column in ["sharpe", "turnover"]:
             if column in display.columns:
                 display[column] = display[column].map(_format_number)
-        st.dataframe(display, use_container_width=True, hide_index=True)
+        columns = [
+            column
+            for column in [
+                "factor_name",
+                "factor_direction",
+                "cost_scenario",
+                "commission",
+                "stamp_tax",
+                "slippage",
+                "total_return",
+                "before_cost_total_return",
+                "cost_drag",
+                "cost_to_return",
+                "sharpe",
+                "turnover",
+            ]
+            if column in display.columns
+        ]
+        st.dataframe(display[columns], use_container_width=True, hide_index=True)
 
 
 def main() -> None:

@@ -16,7 +16,20 @@ param(
     [double]$CommissionRate = 0.0003,
     [double]$SlippageRate = 0.0005,
     [double]$StampTaxRate = 0.0005,
+    [ValidateSet("top", "bottom")]
+    [string]$FactorDirection = "top",
+    [double]$TopQuantile = 0.1,
+    [int]$RebalanceInterval = 20,
+    [Nullable[double]]$EntryQuantile = $null,
+    [Nullable[double]]$ExitQuantile = $null,
     [Nullable[double]]$SentimentThreshold = $null,
+    [ValidateSet("step", "smooth")]
+    [string]$SentimentMode = "step",
+    [double]$SentimentSmoothAlpha = 0.2,
+    [double]$MinExposure = 0.3,
+    [double]$MaxExposure = 1.0,
+    [double]$BaseExposure = 0.6,
+    [double]$SentimentScale = 0.2,
     [double]$WeakSentimentExposure = 0.5,
     [double]$NormalExposure = 1.0,
     [int]$Retries = 3,
@@ -120,8 +133,23 @@ $RunAllArgs = @(
     "--transaction-cost", "$TransactionCost",
     "--commission-rate", "$CommissionRate",
     "--slippage-rate", "$SlippageRate",
-    "--stamp-tax-rate", "$StampTaxRate"
+    "--stamp-tax-rate", "$StampTaxRate",
+    "--factor-direction", "$FactorDirection",
+    "--top-quantile", "$TopQuantile",
+    "--rebalance-interval", "$RebalanceInterval",
+    "--sentiment-mode", "$SentimentMode",
+    "--sentiment-smooth-alpha", "$SentimentSmoothAlpha",
+    "--min-exposure", "$MinExposure",
+    "--max-exposure", "$MaxExposure",
+    "--base-exposure", "$BaseExposure",
+    "--sentiment-scale", "$SentimentScale"
 )
+if ($null -ne $EntryQuantile) {
+    $RunAllArgs += @("--entry-quantile", "$EntryQuantile")
+}
+if ($null -ne $ExitQuantile) {
+    $RunAllArgs += @("--exit-quantile", "$ExitQuantile")
+}
 if ($null -ne $SentimentThreshold) {
     $RunAllArgs += @(
         "--sentiment-threshold", "$SentimentThreshold",
@@ -139,8 +167,23 @@ $FactorSuiteArgs = @(
     "--transaction-cost", "$TransactionCost",
     "--commission-rate", "$CommissionRate",
     "--slippage-rate", "$SlippageRate",
-    "--stamp-tax-rate", "$StampTaxRate"
+    "--stamp-tax-rate", "$StampTaxRate",
+    "--factor-direction", "$FactorDirection",
+    "--top-quantile", "$TopQuantile",
+    "--rebalance-interval", "$RebalanceInterval",
+    "--sentiment-mode", "$SentimentMode",
+    "--sentiment-smooth-alpha", "$SentimentSmoothAlpha",
+    "--min-exposure", "$MinExposure",
+    "--max-exposure", "$MaxExposure",
+    "--base-exposure", "$BaseExposure",
+    "--sentiment-scale", "$SentimentScale"
 )
+if ($null -ne $EntryQuantile) {
+    $FactorSuiteArgs += @("--entry-quantile", "$EntryQuantile")
+}
+if ($null -ne $ExitQuantile) {
+    $FactorSuiteArgs += @("--exit-quantile", "$ExitQuantile")
+}
 if ($null -ne $SentimentThreshold) {
     $FactorSuiteArgs += @(
         "--sentiment-threshold", "$SentimentThreshold",
@@ -203,6 +246,7 @@ print_frame_status("backtest_daily", f"data/ads/backtest_daily_{factor_name}.par
 print_frame_status("factor_yearly_summary", "data/ads/factor_yearly_summary.parquet")
 print_frame_status("factor_rolling_summary", "data/ads/factor_rolling_summary.parquet")
 print_frame_status("parameter_sensitivity", "data/ads/parameter_sensitivity.parquet")
+print_frame_status("cost_sensitivity", "data/ads/cost_sensitivity.parquet")
 
 metrics_path = Path(f"data/ads/backtest_metrics_{factor_name}.json")
 if metrics_path.exists():

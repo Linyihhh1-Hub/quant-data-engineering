@@ -8,17 +8,60 @@ def select_top_symbols(
     snapshot: pd.DataFrame,
     factor_name: str,
     top_quantile: float = 0.1,
+    factor_direction: str = "top",
 ) -> list[str]:
     if factor_name not in snapshot.columns:
         raise ValueError(f"Missing factor column: {factor_name}")
     if not 0 < top_quantile <= 1:
         raise ValueError("top_quantile must be in (0, 1]")
+    if factor_direction not in {"top", "bottom"}:
+        raise ValueError("factor_direction must be 'top' or 'bottom'")
 
+    ascending = factor_direction == "bottom"
     valid = snapshot.dropna(subset=[factor_name]).sort_values(
-        [factor_name, "symbol"], ascending=[False, True]
+        [factor_name, "symbol"], ascending=[ascending, True]
     )
     count = max(1, math.ceil(len(valid) * top_quantile))
     return valid.head(count)["symbol"].tolist()
+
+
+def select_buffered_symbols(
+    snapshot: pd.DataFrame,
+    factor_name: str,
+    current_positions: set[str],
+    top_quantile: float = 0.1,
+    entry_quantile: float | None = None,
+    exit_quantile: float | None = None,
+    factor_direction: str = "top",
+) -> set[str]:
+    entry = top_quantile if entry_quantile is None else entry_quantile
+    exit_ = top_quantile if exit_quantile is None else exit_quantile
+    for name, value in {"top_quantile": top_quantile, "entry_quantile": entry, "exit_quantile": exit_}.items():
+        if not 0 < value <= 1:
+            raise ValueError(f"{name} must be in (0, 1]")
+    if entry > exit_:
+        raise ValueError("entry_quantile must be less than or equal to exit_quantile")
+    if factor_direction not in {"top", "bottom"}:
+        raise ValueError("factor_direction must be 'top' or 'bottom'")
+
+    if factor_name not in snapshot.columns:
+        raise ValueError(f"Missing factor column: {factor_name}")
+    ascending = factor_direction == "bottom"
+    valid = snapshot.dropna(subset=[factor_name]).sort_values([factor_name, "symbol"], ascending=[ascending, True])
+    target_count = max(1, math.ceil(len(valid) * top_quantile))
+    entry_count = max(1, math.ceil(len(valid) * entry))
+    exit_count = max(1, math.ceil(len(valid) * exit_))
+    entry_symbols = valid.head(entry_count)["symbol"].tolist()
+    hold_universe = set(valid.head(exit_count)["symbol"].tolist())
+    kept = [symbol for symbol in entry_symbols if symbol in current_positions and symbol in hold_universe]
+    kept.extend(sorted(symbol for symbol in current_positions if symbol in hold_universe and symbol not in kept))
+    selected = kept[:target_count]
+    for symbol in entry_symbols:
+        if len(selected) >= target_count:
+            break
+        if symbol not in selected:
+            selected.append(symbol)
+    return set(selected)
 
 
 def compute_daily_returns(daily_bars: pd.DataFrame) -> pd.DataFrame:
@@ -146,6 +189,30 @@ def _target_exposure_for_signal(
     return normal_exposure
 
 
+def _raw_target_exposure(
+    sentiment_scores: dict[pd.Timestamp, float],
+    signal_date: pd.Timestamp,
+    sentiment_threshold: float | None,
+    weak_sentiment_exposure: float,
+    normal_exposure: float,
+    sentiment_mode: str,
+    min_exposure: float,
+    max_exposure: float,
+    base_exposure: float,
+    sentiment_scale: float,
+) -> tuple[float, float | None]:
+    score = sentiment_scores.get(signal_date)
+    if sentiment_mode == "step":
+        return (
+            _target_exposure_for_signal(sentiment_scores, signal_date, sentiment_threshold, weak_sentiment_exposure, normal_exposure),
+            score,
+        )
+    if score is None:
+        return normal_exposure, None
+    raw = base_exposure + sentiment_scale * score
+    return float(np.clip(raw, min_exposure, max_exposure)), score
+
+
 def _max_drawdown(values: pd.Series) -> pd.Series:
     running_max = values.cummax()
     return values / running_max - 1
@@ -170,6 +237,9 @@ def run_simple_backtest(
     factor_name: str,
     top_quantile: float = 0.1,
     rebalance_interval: int = 20,
+    factor_direction: str = "top",
+    entry_quantile: float | None = None,
+    exit_quantile: float | None = None,
     transaction_cost: float = 0.001,
     commission_rate: float = 0.0,
     slippage_rate: float = 0.0,
@@ -177,6 +247,12 @@ def run_simple_backtest(
     market_sentiment: pd.DataFrame | None = None,
     benchmark_index: pd.DataFrame | None = None,
     sentiment_threshold: float | None = None,
+    sentiment_mode: str = "step",
+    sentiment_smooth_alpha: float = 0.2,
+    min_exposure: float = 0.3,
+    max_exposure: float = 1.0,
+    base_exposure: float = 0.6,
+    sentiment_scale: float = 0.2,
     weak_sentiment_exposure: float = 0.5,
     normal_exposure: float = 1.0,
 ) -> tuple[pd.DataFrame, dict[str, float]]:
@@ -184,10 +260,18 @@ def run_simple_backtest(
         raise ValueError("rebalance_interval must be >= 1")
     if transaction_cost < 0:
         raise ValueError("transaction_cost must be >= 0")
+    if factor_direction not in {"top", "bottom"}:
+        raise ValueError("factor_direction must be 'top' or 'bottom'")
+    if sentiment_mode not in {"step", "smooth"}:
+        raise ValueError("sentiment_mode must be 'step' or 'smooth'")
+    if not 0 < sentiment_smooth_alpha <= 1:
+        raise ValueError("sentiment_smooth_alpha must be in (0, 1]")
     if commission_rate < 0 or slippage_rate < 0 or stamp_tax_rate < 0:
         raise ValueError("commission_rate, slippage_rate and stamp_tax_rate must be >= 0")
     if not 0 <= weak_sentiment_exposure <= 1 or not 0 <= normal_exposure <= 1:
         raise ValueError("weak_sentiment_exposure and normal_exposure must be in [0, 1]")
+    if not 0 <= min_exposure <= max_exposure <= 1:
+        raise ValueError("min_exposure and max_exposure must satisfy 0 <= min <= max <= 1")
     if weak_sentiment_exposure > normal_exposure:
         raise ValueError("weak_sentiment_exposure must be less than or equal to normal_exposure")
 
@@ -211,6 +295,9 @@ def run_simple_backtest(
     total_turnover = 0.0
     total_cost = 0.0
     target_exposure = normal_exposure
+    raw_target_exposure = normal_exposure
+    market_sentiment_score = None
+    rebalance_count = 0
     sentiment_scores = _sentiment_by_date(market_sentiment)
     index_returns = _index_return_by_date(benchmark_index)
     rows = []
@@ -223,17 +310,38 @@ def run_simple_backtest(
         if timestamp in rebalance_dates:
             signal_date = next(signal for signal, execution in execution_dates.items() if execution == timestamp)
             snapshot = factor_frame[factor_frame["trade_date"] == signal_date]
-            target_positions = set(select_top_symbols(snapshot, factor_name, top_quantile))
+            target_positions = select_buffered_symbols(
+                snapshot,
+                factor_name,
+                current_positions,
+                top_quantile=top_quantile,
+                entry_quantile=entry_quantile,
+                exit_quantile=exit_quantile,
+                factor_direction=factor_direction,
+            )
             # 情绪择时只使用信号日已经产生的市场情绪分数，仓位调整在下一交易日执行。
-            target_exposure = _target_exposure_for_signal(
+            raw_target_exposure, market_sentiment_score = _raw_target_exposure(
                 sentiment_scores,
                 signal_date,
                 sentiment_threshold,
                 weak_sentiment_exposure,
                 normal_exposure,
+                sentiment_mode,
+                min_exposure,
+                max_exposure,
+                base_exposure,
+                sentiment_scale,
             )
+            if sentiment_mode == "smooth":
+                target_exposure = (
+                    sentiment_smooth_alpha * raw_target_exposure
+                    + (1 - sentiment_smooth_alpha) * target_exposure
+                )
+            else:
+                target_exposure = raw_target_exposure
             tradability = _tradability_snapshot(returns, timestamp)
             new_positions = _apply_trade_constraints(current_positions, target_positions, tradability)
+            rebalance_count += 1
 
             # 调仓成本按权重变化粗略估算：第一次建仓不扣成本，后续换仓按 turnover 扣。
             if current_positions:
@@ -281,7 +389,11 @@ def run_simple_backtest(
                 "benchmark_return": benchmark_return,
                 "hs300_benchmark_return": hs300_benchmark_return,
                 "positions_count": len(current_positions),
+                "factor_direction": factor_direction,
+                "market_sentiment_score": market_sentiment_score,
+                "raw_target_exposure": raw_target_exposure,
                 "target_exposure": target_exposure,
+                "sentiment_mode": sentiment_mode,
                 "daily_turnover": daily_turnover,
                 "daily_cost_rate": daily_cost_rate,
             }
@@ -289,14 +401,17 @@ def run_simple_backtest(
 
     result = pd.DataFrame(rows)
     result["drawdown"] = _max_drawdown(result["portfolio_value"])
+    exposure_turnover = float(result["target_exposure"].diff().abs().fillna(0).sum()) if not result.empty else 0.0
 
     total_return = float(result["portfolio_value"].iloc[-1] - 1) if not result.empty else 0.0
     gross_total_return = float(result["gross_portfolio_value"].iloc[-1] - 1) if not result.empty else 0.0
+    net_daily_return = result["portfolio_value"].pct_change().fillna(0.0) if not result.empty else pd.Series(dtype="float64")
     metrics = {
         "total_return": total_return,
         "gross_total_return": gross_total_return,
         "cost_drag": gross_total_return - total_return,
         "cost_return_ratio": float(total_cost / abs(gross_total_return)) if gross_total_return != 0 else 0.0,
+        "cost_to_return": float(total_cost / abs(gross_total_return)) if gross_total_return != 0 else 0.0,
         "annualized_return": _annualized_return(total_return, len(result)),
         "equal_weight_total_return": float(result["benchmark_value"].iloc[-1] - 1) if not result.empty else 0.0,
         "hs300_total_return": float(result["hs300_benchmark_value"].iloc[-1] - 1) if not result.empty else 0.0,
@@ -304,10 +419,25 @@ def run_simple_backtest(
         if not result.empty
         else 0.0,
         "max_drawdown": float(result["drawdown"].min()) if not result.empty else 0.0,
-        "sharpe": _sharpe(result["daily_return"]),
+        "sharpe": _sharpe(net_daily_return),
         "turnover": float(total_turnover),
         "total_cost": float(total_cost),
+        "factor_direction": factor_direction,
+        "top_quantile": float(top_quantile),
+        "rebalance_interval": float(rebalance_interval),
+        "entry_quantile": float(top_quantile if entry_quantile is None else entry_quantile),
+        "exit_quantile": float(top_quantile if exit_quantile is None else exit_quantile),
+        "average_holding_count": float(result["positions_count"].mean()) if not result.empty else 0.0,
+        "rebalance_count": float(rebalance_count),
+        "average_turnover_per_rebalance": float(total_turnover / rebalance_count) if rebalance_count else 0.0,
+        "sentiment_mode": sentiment_mode,
+        "min_exposure": float(min_exposure),
+        "max_exposure": float(max_exposure),
+        "base_exposure": float(base_exposure),
+        "sentiment_scale": float(sentiment_scale),
+        "sentiment_smooth_alpha": float(sentiment_smooth_alpha),
         "average_exposure": float(result["target_exposure"].mean()) if not result.empty else 0.0,
+        "exposure_turnover": exposure_turnover,
     }
     return result[
         [
@@ -321,7 +451,11 @@ def run_simple_backtest(
             "hs300_benchmark_return",
             "drawdown",
             "positions_count",
+            "factor_direction",
+            "market_sentiment_score",
+            "raw_target_exposure",
             "target_exposure",
+            "sentiment_mode",
             "daily_turnover",
             "daily_cost_rate",
         ]

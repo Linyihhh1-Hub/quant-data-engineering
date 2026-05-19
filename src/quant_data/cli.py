@@ -8,6 +8,7 @@ from quant_data.dimensions.market import write_hs300_symbol_pool
 from quant_data.dimensions.market import write_stock_basic
 from quant_data.dimensions.market import write_trade_calendar
 from quant_data.evaluation.factor import evaluate_factor
+from quant_data.evaluation.cost import write_cost_sensitivity
 from quant_data.evaluation.sensitivity import parse_float_list
 from quant_data.evaluation.sensitivity import parse_int_list
 from quant_data.evaluation.sensitivity import write_parameter_sensitivity
@@ -136,11 +137,20 @@ def run_backtest(
     factor_name: str,
     top_quantile: float,
     rebalance_interval: int,
+    factor_direction: str,
+    entry_quantile: float | None,
+    exit_quantile: float | None,
     transaction_cost: float,
     commission_rate: float,
     slippage_rate: float,
     stamp_tax_rate: float,
     sentiment_threshold: float | None = None,
+    sentiment_mode: str = "step",
+    sentiment_smooth_alpha: float = 0.2,
+    min_exposure: float = 0.3,
+    max_exposure: float = 1.0,
+    base_exposure: float = 0.6,
+    sentiment_scale: float = 0.2,
     weak_sentiment_exposure: float = 0.5,
     normal_exposure: float = 1.0,
 ) -> tuple[Path, Path]:
@@ -148,7 +158,7 @@ def run_backtest(
     cleaned = read_parquet(paths["dwd"])
     factors = read_parquet(paths["factors"])
     market_sentiment = None
-    if sentiment_threshold is not None:
+    if sentiment_threshold is not None or sentiment_mode == "smooth":
         market_sentiment = read_parquet(paths["market_sentiment"])
     benchmark_index = read_parquet(paths["hs300_index"]) if paths["hs300_index"].exists() else None
     daily_result, metrics = run_simple_backtest(
@@ -157,6 +167,9 @@ def run_backtest(
         factor_name,
         top_quantile=top_quantile,
         rebalance_interval=rebalance_interval,
+        factor_direction=factor_direction,
+        entry_quantile=entry_quantile,
+        exit_quantile=exit_quantile,
         transaction_cost=transaction_cost,
         commission_rate=commission_rate,
         slippage_rate=slippage_rate,
@@ -164,6 +177,12 @@ def run_backtest(
         market_sentiment=market_sentiment,
         benchmark_index=benchmark_index,
         sentiment_threshold=sentiment_threshold,
+        sentiment_mode=sentiment_mode,
+        sentiment_smooth_alpha=sentiment_smooth_alpha,
+        min_exposure=min_exposure,
+        max_exposure=max_exposure,
+        base_exposure=base_exposure,
+        sentiment_scale=sentiment_scale,
         weak_sentiment_exposure=weak_sentiment_exposure,
         normal_exposure=normal_exposure,
     )
@@ -187,11 +206,20 @@ def run_factor_suite(
     groups: int,
     top_quantile: float,
     rebalance_interval: int,
+    factor_direction: str,
+    entry_quantile: float | None,
+    exit_quantile: float | None,
     transaction_cost: float,
     commission_rate: float,
     slippage_rate: float,
     stamp_tax_rate: float,
     sentiment_threshold: float | None = None,
+    sentiment_mode: str = "step",
+    sentiment_smooth_alpha: float = 0.2,
+    min_exposure: float = 0.3,
+    max_exposure: float = 1.0,
+    base_exposure: float = 0.6,
+    sentiment_scale: float = 0.2,
     weak_sentiment_exposure: float = 0.5,
     normal_exposure: float = 1.0,
 ) -> list[tuple[Path, Path, Path]]:
@@ -203,11 +231,20 @@ def run_factor_suite(
             factor_name,
             top_quantile,
             rebalance_interval,
+            factor_direction,
+            entry_quantile,
+            exit_quantile,
             transaction_cost,
             commission_rate,
             slippage_rate,
             stamp_tax_rate,
             sentiment_threshold,
+            sentiment_mode,
+            sentiment_smooth_alpha,
+            min_exposure,
+            max_exposure,
+            base_exposure,
+            sentiment_scale,
             weak_sentiment_exposure,
             normal_exposure,
         )
@@ -226,7 +263,8 @@ def run_stability(
 
 def run_sensitivity(
     output_dir: Path,
-    factor_name: str,
+    factor_names: list[str],
+    factor_directions: list[str],
     top_quantiles: list[float],
     rebalance_intervals: list[int],
     transaction_cost: float,
@@ -234,12 +272,19 @@ def run_sensitivity(
     slippage_rate: float,
     stamp_tax_rate: float,
     sentiment_threshold: float | None = None,
+    sentiment_mode: str = "step",
+    sentiment_smooth_alpha: float = 0.2,
+    min_exposure: float = 0.3,
+    max_exposure: float = 1.0,
+    base_exposure: float = 0.6,
+    sentiment_scale: float = 0.2,
     weak_sentiment_exposure: float = 0.5,
     normal_exposure: float = 1.0,
 ) -> Path:
     return write_parameter_sensitivity(
         output_dir,
-        factor_name,
+        factor_names,
+        factor_directions,
         top_quantiles,
         rebalance_intervals,
         transaction_cost,
@@ -247,6 +292,46 @@ def run_sensitivity(
         slippage_rate,
         stamp_tax_rate,
         sentiment_threshold,
+        sentiment_mode,
+        sentiment_smooth_alpha,
+        min_exposure,
+        max_exposure,
+        base_exposure,
+        sentiment_scale,
+        weak_sentiment_exposure,
+        normal_exposure,
+    )
+
+
+def run_cost_sensitivity_cli(
+    output_dir: Path,
+    factor_name: str,
+    factor_direction: str,
+    top_quantile: float,
+    rebalance_interval: int,
+    sentiment_threshold: float | None = None,
+    sentiment_mode: str = "step",
+    sentiment_smooth_alpha: float = 0.2,
+    min_exposure: float = 0.3,
+    max_exposure: float = 1.0,
+    base_exposure: float = 0.6,
+    sentiment_scale: float = 0.2,
+    weak_sentiment_exposure: float = 0.5,
+    normal_exposure: float = 1.0,
+) -> Path:
+    return write_cost_sensitivity(
+        output_dir,
+        factor_name,
+        factor_direction,
+        top_quantile,
+        rebalance_interval,
+        sentiment_threshold,
+        sentiment_mode,
+        sentiment_smooth_alpha,
+        min_exposure,
+        max_exposure,
+        base_exposure,
+        sentiment_scale,
         weak_sentiment_exposure,
         normal_exposure,
     )
@@ -277,6 +362,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     def add_common(stage: argparse.ArgumentParser) -> None:
         stage.add_argument("--output-dir", type=Path, default=Path("data"))
+
+    def add_backtest_options(stage: argparse.ArgumentParser) -> None:
+        stage.add_argument("--factor-direction", choices=["top", "bottom"], default="top")
+        stage.add_argument("--entry-quantile", type=float)
+        stage.add_argument("--exit-quantile", type=float)
+        stage.add_argument("--sentiment-mode", choices=["step", "smooth"], default="step")
+        stage.add_argument("--sentiment-smooth-alpha", type=float, default=0.2)
+        stage.add_argument("--min-exposure", type=float, default=0.3)
+        stage.add_argument("--max-exposure", type=float, default=1.0)
+        stage.add_argument("--base-exposure", type=float, default=0.6)
+        stage.add_argument("--sentiment-scale", type=float, default=0.2)
 
     clean = subparsers.add_parser("clean")
     clean.add_argument("--input", type=Path, required=True)
@@ -329,6 +425,7 @@ def build_parser() -> argparse.ArgumentParser:
     backtest.add_argument("--factor-name", default="momentum_20d_zscore")
     backtest.add_argument("--top-quantile", type=float, default=0.1)
     backtest.add_argument("--rebalance-interval", type=int, default=20)
+    add_backtest_options(backtest)
     backtest.add_argument("--transaction-cost", type=float, default=0.001)
     backtest.add_argument("--commission-rate", type=float, default=0.0003)
     backtest.add_argument("--slippage-rate", type=float, default=0.0005)
@@ -344,6 +441,7 @@ def build_parser() -> argparse.ArgumentParser:
     factor_suite.add_argument("--groups", type=int, default=5)
     factor_suite.add_argument("--top-quantile", type=float, default=0.1)
     factor_suite.add_argument("--rebalance-interval", type=int, default=20)
+    add_backtest_options(factor_suite)
     factor_suite.add_argument("--transaction-cost", type=float, default=0.001)
     factor_suite.add_argument("--commission-rate", type=float, default=0.0003)
     factor_suite.add_argument("--slippage-rate", type=float, default=0.0005)
@@ -360,9 +458,15 @@ def build_parser() -> argparse.ArgumentParser:
 
     sensitivity = subparsers.add_parser("sensitivity")
     add_common(sensitivity)
-    sensitivity.add_argument("--factor-name", default="momentum_20d_zscore")
+    sensitivity.add_argument("--factor-name")
+    sensitivity.add_argument(
+        "--factor-names",
+        default="momentum_20d,reversal_5d,volatility_20d,volume_ratio_5d,ma_bias_20d",
+    )
+    sensitivity.add_argument("--factor-directions", default="top,bottom")
     sensitivity.add_argument("--top-quantiles", default="0.1,0.2,0.3")
-    sensitivity.add_argument("--rebalance-intervals", default="5,10,20")
+    sensitivity.add_argument("--rebalance-intervals", default="10,20,40,60")
+    add_backtest_options(sensitivity)
     sensitivity.add_argument("--transaction-cost", type=float, default=0.001)
     sensitivity.add_argument("--commission-rate", type=float, default=0.0003)
     sensitivity.add_argument("--slippage-rate", type=float, default=0.0005)
@@ -370,6 +474,16 @@ def build_parser() -> argparse.ArgumentParser:
     sensitivity.add_argument("--sentiment-threshold", type=float)
     sensitivity.add_argument("--weak-sentiment-exposure", type=float, default=0.5)
     sensitivity.add_argument("--normal-exposure", type=float, default=1.0)
+
+    cost_sensitivity = subparsers.add_parser("cost-sensitivity")
+    add_common(cost_sensitivity)
+    cost_sensitivity.add_argument("--factor-name", default="momentum_20d_zscore")
+    cost_sensitivity.add_argument("--top-quantile", type=float, default=0.1)
+    cost_sensitivity.add_argument("--rebalance-interval", type=int, default=20)
+    add_backtest_options(cost_sensitivity)
+    cost_sensitivity.add_argument("--sentiment-threshold", type=float)
+    cost_sensitivity.add_argument("--weak-sentiment-exposure", type=float, default=0.5)
+    cost_sensitivity.add_argument("--normal-exposure", type=float, default=1.0)
 
     load_clickhouse = subparsers.add_parser("load-clickhouse")
     add_common(load_clickhouse)
@@ -388,6 +502,7 @@ def build_parser() -> argparse.ArgumentParser:
     run_all.add_argument("--groups", type=int, default=5)
     run_all.add_argument("--top-quantile", type=float, default=0.1)
     run_all.add_argument("--rebalance-interval", type=int, default=20)
+    add_backtest_options(run_all)
     run_all.add_argument("--transaction-cost", type=float, default=0.001)
     run_all.add_argument("--commission-rate", type=float, default=0.0003)
     run_all.add_argument("--slippage-rate", type=float, default=0.0005)
@@ -440,11 +555,20 @@ def main(argv: list[str] | None = None) -> int:
             args.factor_name,
             args.top_quantile,
             args.rebalance_interval,
+            args.factor_direction,
+            args.entry_quantile,
+            args.exit_quantile,
             args.transaction_cost,
             args.commission_rate,
             args.slippage_rate,
             args.stamp_tax_rate,
             args.sentiment_threshold,
+            args.sentiment_mode,
+            args.sentiment_smooth_alpha,
+            args.min_exposure,
+            args.max_exposure,
+            args.base_exposure,
+            args.sentiment_scale,
             args.weak_sentiment_exposure,
             args.normal_exposure,
         )
@@ -456,11 +580,20 @@ def main(argv: list[str] | None = None) -> int:
             args.groups,
             args.top_quantile,
             args.rebalance_interval,
+            args.factor_direction,
+            args.entry_quantile,
+            args.exit_quantile,
             args.transaction_cost,
             args.commission_rate,
             args.slippage_rate,
             args.stamp_tax_rate,
             args.sentiment_threshold,
+            args.sentiment_mode,
+            args.sentiment_smooth_alpha,
+            args.min_exposure,
+            args.max_exposure,
+            args.base_exposure,
+            args.sentiment_scale,
             args.weak_sentiment_exposure,
             args.normal_exposure,
         )
@@ -470,7 +603,8 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "sensitivity":
         run_sensitivity(
             args.output_dir,
-            args.factor_name,
+            _parse_factor_names(args.factor_name or args.factor_names),
+            [direction.strip() for direction in args.factor_directions.split(",") if direction.strip()],
             parse_float_list(args.top_quantiles),
             parse_int_list(args.rebalance_intervals),
             args.transaction_cost,
@@ -478,6 +612,29 @@ def main(argv: list[str] | None = None) -> int:
             args.slippage_rate,
             args.stamp_tax_rate,
             args.sentiment_threshold,
+            args.sentiment_mode,
+            args.sentiment_smooth_alpha,
+            args.min_exposure,
+            args.max_exposure,
+            args.base_exposure,
+            args.sentiment_scale,
+            args.weak_sentiment_exposure,
+            args.normal_exposure,
+        )
+    elif args.command == "cost-sensitivity":
+        run_cost_sensitivity_cli(
+            args.output_dir,
+            args.factor_name,
+            args.factor_direction,
+            args.top_quantile,
+            args.rebalance_interval,
+            args.sentiment_threshold,
+            args.sentiment_mode,
+            args.sentiment_smooth_alpha,
+            args.min_exposure,
+            args.max_exposure,
+            args.base_exposure,
+            args.sentiment_scale,
             args.weak_sentiment_exposure,
             args.normal_exposure,
         )
@@ -501,25 +658,57 @@ def main(argv: list[str] | None = None) -> int:
             args.factor_name,
             args.top_quantile,
             args.rebalance_interval,
+            args.factor_direction,
+            args.entry_quantile,
+            args.exit_quantile,
             args.transaction_cost,
             args.commission_rate,
             args.slippage_rate,
             args.stamp_tax_rate,
             args.sentiment_threshold,
+            args.sentiment_mode,
+            args.sentiment_smooth_alpha,
+            args.min_exposure,
+            args.max_exposure,
+            args.base_exposure,
+            args.sentiment_scale,
             args.weak_sentiment_exposure,
             args.normal_exposure,
         )
         run_stability(args.output_dir, [args.factor_name])
         run_sensitivity(
             args.output_dir,
-            args.factor_name,
+            [args.factor_name],
+            ["top", "bottom"],
             [0.1, 0.2, 0.3],
-            [5, 10, 20],
+            [10, 20, 40, 60],
             args.transaction_cost,
             args.commission_rate,
             args.slippage_rate,
             args.stamp_tax_rate,
             args.sentiment_threshold,
+            args.sentiment_mode,
+            args.sentiment_smooth_alpha,
+            args.min_exposure,
+            args.max_exposure,
+            args.base_exposure,
+            args.sentiment_scale,
+            args.weak_sentiment_exposure,
+            args.normal_exposure,
+        )
+        run_cost_sensitivity_cli(
+            args.output_dir,
+            args.factor_name,
+            args.factor_direction,
+            args.top_quantile,
+            args.rebalance_interval,
+            args.sentiment_threshold,
+            args.sentiment_mode,
+            args.sentiment_smooth_alpha,
+            args.min_exposure,
+            args.max_exposure,
+            args.base_exposure,
+            args.sentiment_scale,
             args.weak_sentiment_exposure,
             args.normal_exposure,
         )

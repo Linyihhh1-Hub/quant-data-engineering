@@ -250,11 +250,15 @@
 | `hs300_benchmark_return` | 沪深 300 指数当日收益率 | `0.001` |
 | `drawdown` | 策略当前回撤，等于 `portfolio_value / 历史最高净值 - 1` | `-0.08` |
 | `positions_count` | 当日持仓股票数量 | `20` |
+| `factor_direction` | 因子选股方向，`top` 表示选高因子值，`bottom` 表示选低因子值 | `top` |
+| `market_sentiment_score` | 当日市场情绪分数，用于情绪择时仓位计算 | `0.42` |
+| `raw_target_exposure` | 平滑前的目标仓位，step 模式下等于硬切换仓位，smooth 模式下由情绪分数线性映射 | `0.68` |
 | `target_exposure` | 情绪择时后的目标仓位，默认 1.0；低情绪时可降为 0.3、0.5 等 | `0.3` |
+| `sentiment_mode` | 情绪仓位模式，`step` 为阈值切换，`smooth` 为连续平滑仓位 | `smooth` |
 | `daily_turnover` | 当日调仓换手，非调仓日为 0 | `0.8` |
 | `daily_cost_rate` | 当日交易成本扣减比例，非调仓日为 0 | `0.0012` |
 
-说明：当前回测是研究型简化回测，主要用于验证因子数据链路、调仓逻辑和结果产出，不等同于可实盘交易策略。开启情绪择时时，`target_exposure` 使用调仓信号日的 `market_sentiment_score` 决定，并在下一交易日执行，避免未来函数。
+说明：当前回测是研究型简化回测，主要用于验证因子数据链路、调仓逻辑和结果产出，不等同于可实盘交易策略。开启情绪择时时，`target_exposure` 使用调仓信号日的 `market_sentiment_score` 决定，并在下一交易日执行，避免未来函数。`smooth` 模式会先计算 `raw_target_exposure`，再进行指数平滑，减少仓位在阈值附近频繁硬切换。
 
 ## 年度表现汇总
 
@@ -299,20 +303,47 @@
 | 字段 | 含义 | 示例 |
 | --- | --- | --- |
 | `factor_name` | 因子名称 | `momentum_20d_zscore` |
-| `top_quantile` | 调仓时选择的高因子股票比例 | `0.2` |
+| `factor_direction` | 因子方向，`top` 选高因子值，`bottom` 选低因子值 | `top` |
+| `top_quantile` | 调仓时选择的股票比例；方向由 `factor_direction` 决定 | `0.2` |
 | `rebalance_interval` | 调仓间隔，单位为交易日 | `20` |
 | `total_return` | 成本后策略累计收益 | `0.018` |
 | `gross_total_return` | 成本前策略累计收益 | `0.237` |
-| `equal_weight_total_return` | 股票池等权基准累计收益 | `1.198` |
-| `hs300_total_return` | 沪深 300 指数基准累计收益 | `-0.052` |
-| `hs300_excess_return` | 策略相对沪深 300 的超额收益 | `0.071` |
+| `benchmark_total_return` | 股票池等权基准累计收益 | `1.198` |
+| `index_total_return` | 沪深 300 指数基准累计收益 | `-0.052` |
+| `excess_return` | 策略相对等权基准的超额收益 | `0.071` |
+| `index_excess_return` | 策略相对沪深 300 的超额收益 | `0.071` |
+| `annualized_return` | 年化收益率 | `0.05` |
 | `sharpe` | 夏普比率 | `0.33` |
 | `max_drawdown` | 最大回撤 | `-0.26` |
 | `turnover` | 累计换手 | `94.86` |
 | `total_cost` | 累计交易成本估算 | `0.194` |
 | `cost_drag` | 成本侵蚀 | `0.219` |
+| `cost_to_return` | 累计交易成本 / 成本前收益绝对值 | `0.42` |
+| `average_exposure` | 平均目标仓位 | `0.83` |
 
-说明：参数敏感性分析用于观察策略表现是否依赖单一参数设定。当前默认网格为 `top_quantile = 0.1 / 0.2 / 0.3`，`rebalance_interval = 5 / 10 / 20`。
+说明：参数敏感性分析用于观察策略表现是否依赖单一参数设定。当前默认网格包含 `factor_direction = top / bottom`，`top_quantile = 0.1 / 0.2 / 0.3`，`rebalance_interval = 10 / 20 / 40 / 60`。
+
+## 成本敏感性分析
+
+路径：`data/ads/cost_sensitivity.parquet`
+
+| 字段 | 含义 | 示例 |
+| --- | --- | --- |
+| `factor_name` | 因子名称 | `momentum_20d_zscore` |
+| `factor_direction` | 因子方向 | `top` |
+| `cost_scenario` | 成本场景，包含 `no_cost`、`low_cost`、`default_cost`、`high_cost` | `default_cost` |
+| `commission` | 佣金率 | `0.0003` |
+| `stamp_tax` | 印花税率 | `0.0005` |
+| `slippage` | 滑点率 | `0.0005` |
+| `total_return` | 成本后策略累计收益 | `0.12` |
+| `before_cost_total_return` | 成本前策略累计收益 | `0.18` |
+| `cost_drag` | 成本侵蚀，成本前累计收益 - 成本后累计收益 | `0.06` |
+| `cost_to_return` | 累计交易成本 / 成本前收益绝对值 | `0.33` |
+| `max_drawdown` | 最大回撤 | `-0.15` |
+| `sharpe` | 夏普比率 | `0.9` |
+| `turnover` | 累计换手 | `18.5` |
+
+说明：成本敏感性分析用于判断策略是否过度依赖低成本假设。正常情况下，`no_cost` 到 `high_cost` 的收益会逐步下降，下降幅度越大，说明策略越容易被交易成本侵蚀。
 
 ## 回测指标
 
@@ -321,9 +352,16 @@
 | 字段 | 含义 | 示例 |
 | --- | --- | --- |
 | `total_return` | 全区间累计收益率 | `0.25` |
+| `factor_direction` | 因子选股方向 | `top` |
+| `entry_quantile` | 新买入阈值，进入该比例范围才允许补仓 | `0.1` |
+| `exit_quantile` | 持仓保留阈值，仍在该比例范围内则继续持有 | `0.3` |
+| `average_holding_count` | 平均持仓数量 | `30` |
+| `rebalance_count` | 调仓次数 | `60` |
+| `average_turnover_per_rebalance` | 每次调仓平均换手 | `0.18` |
 | `gross_total_return` | 成本前全区间累计收益率 | `0.31` |
 | `cost_drag` | 成本前累计收益 - 成本后累计收益，用于衡量成本侵蚀 | `0.06` |
 | `cost_return_ratio` | 累计交易成本 / 成本前累计收益绝对值 | `0.18` |
+| `cost_to_return` | `cost_return_ratio` 的同义字段，便于敏感性分析统一命名 | `0.18` |
 | `annualized_return` | 年化收益率，按 252 个交易日估算 | `0.28` |
 | `equal_weight_total_return` | 股票池等权基准累计收益率 | `0.18` |
 | `hs300_total_return` | 沪深 300 指数基准累计收益率 | `0.12` |
@@ -332,7 +370,14 @@
 | `sharpe` | 夏普比率，衡量单位波动下的收益表现 | `1.20` |
 | `turnover` | 调仓换手累计值，越高表示交易越频繁 | `8.0` |
 | `total_cost` | 回测累计交易成本估算 | `0.015` |
+| `sentiment_mode` | 情绪仓位模式，`step` 或 `smooth` | `smooth` |
+| `min_exposure` | smooth 模式最小仓位 | `0.3` |
+| `max_exposure` | smooth 模式最大仓位 | `1.0` |
+| `base_exposure` | smooth 模式基础仓位 | `0.6` |
+| `sentiment_scale` | smooth 模式情绪分数映射强度 | `0.2` |
+| `sentiment_smooth_alpha` | smooth 模式指数平滑系数 | `0.2` |
 | `average_exposure` | 回测期间平均目标仓位，用于观察情绪择时整体降仓程度 | `0.82` |
+| `exposure_turnover` | 目标仓位变化幅度累计值，用于观察仓位是否频繁波动 | `3.2` |
 
 ## ClickHouse 表
 
@@ -349,6 +394,7 @@
 | `ads_factor_yearly_summary` | `data/ads/factor_yearly_summary.parquet` | 因子与回测年度表现 |
 | `ads_factor_rolling_summary` | `data/ads/factor_rolling_summary.parquet` | 因子与回测滚动稳定性 |
 | `ads_parameter_sensitivity` | `data/ads/parameter_sensitivity.parquet` | 参数敏感性分析结果 |
+| `ads_cost_sensitivity` | `data/ads/cost_sensitivity.parquet` | 成本敏感性分析结果 |
 | `ops_ingestion_report` | `data/reports/ingestion_report.parquet` | 单只股票采集状态 |
 | `ops_ingestion_runs` | `data/reports/ingestion_runs.parquet` | 每次采集任务运行日志 |
 | `ops_data_quality_report` | `data/reports/data_quality_report.parquet` | 数据质量检查结果 |
