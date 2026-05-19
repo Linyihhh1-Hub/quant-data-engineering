@@ -70,6 +70,44 @@ def test_fetch_stock_daily_standardizes_akshare_columns(monkeypatch):
     assert result.loc[0, "close"] == 10.2
 
 
+def test_fetch_stock_daily_falls_back_to_daily_endpoint(monkeypatch):
+    fake = types.ModuleType("akshare")
+    calls = []
+
+    def stock_zh_a_hist(symbol: str, period: str, start_date: str, end_date: str, adjust: str):
+        calls.append(("hist", symbol, start_date, end_date, adjust))
+        raise RuntimeError("eastmoney failed")
+
+    def stock_zh_a_daily(symbol: str, start_date: str, end_date: str, adjust: str):
+        calls.append(("daily", symbol, start_date, end_date, adjust))
+        return pd.DataFrame(
+            [
+                {
+                    "date": pd.Timestamp("2024-01-02").date(),
+                    "open": 5.87,
+                    "high": 5.98,
+                    "low": 5.81,
+                    "close": 5.94,
+                    "volume": 36905402,
+                    "amount": 244294646,
+                }
+            ]
+        )
+
+    fake.stock_zh_a_hist = stock_zh_a_hist
+    fake.stock_zh_a_daily = stock_zh_a_daily
+    monkeypatch.setitem(sys.modules, "akshare", fake)
+
+    result = fetch_stock_daily("000157", "20240101", "20241231", adjust="qfq")
+
+    assert calls == [
+        ("hist", "000157", "20240101", "20241231", "qfq"),
+        ("daily", "sz000157", "20240101", "20241231", "qfq"),
+    ]
+    assert result["symbol"].tolist() == ["000157"]
+    assert result.loc[0, "close"] == 5.94
+
+
 def test_ingest_stock_daily_writes_successful_symbols_and_skips_failures(monkeypatch, tmp_path):
     install_fake_akshare(monkeypatch, fail_symbols={"600000"})
     output_path = tmp_path / "ods" / "stock_daily.parquet"

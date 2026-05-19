@@ -11,6 +11,7 @@ from quant_data.storage.parquet import write_parquet
 
 AKSHARE_COLUMN_MAP = {
     "日期": "trade_date",
+    "date": "trade_date",
     "开盘": "open",
     "最高": "high",
     "最低": "low",
@@ -61,20 +62,14 @@ def _load_akshare():
         ) from error
 
 
-def fetch_stock_daily(
-    symbol: str,
-    start_date: str,
-    end_date: str,
-    adjust: str = "qfq",
-) -> pd.DataFrame:
-    akshare = _load_akshare()
-    raw = akshare.stock_zh_a_hist(
-        symbol=symbol,
-        period="daily",
-        start_date=start_date,
-        end_date=end_date,
-        adjust=adjust,
-    )
+def _akshare_daily_symbol(symbol: str) -> str:
+    code = symbol.strip().split(".")[0]
+    if code.startswith(("5", "6", "9")):
+        return f"sh{code}"
+    return f"sz{code}"
+
+
+def _standardize_daily_frame(raw: pd.DataFrame, symbol: str) -> pd.DataFrame:
     if raw.empty:
         return pd.DataFrame(columns=ODS_COLUMNS)
 
@@ -87,6 +82,34 @@ def fetch_stock_daily(
     # ODS 层只做字段标准化和股票代码补充，不在采集阶段做业务清洗。
     result["symbol"] = symbol
     return result[ODS_COLUMNS]
+
+
+def fetch_stock_daily(
+    symbol: str,
+    start_date: str,
+    end_date: str,
+    adjust: str = "qfq",
+) -> pd.DataFrame:
+    akshare = _load_akshare()
+    try:
+        raw = akshare.stock_zh_a_hist(
+            symbol=symbol,
+            period="daily",
+            start_date=start_date,
+            end_date=end_date,
+            adjust=adjust,
+        )
+    except Exception as error:
+        # 东方财富历史行情接口偶发代理或连接问题时，使用 AkShare 的日线备用接口继续采集。
+        if not hasattr(akshare, "stock_zh_a_daily"):
+            raise error
+        raw = akshare.stock_zh_a_daily(
+            symbol=_akshare_daily_symbol(symbol),
+            start_date=start_date,
+            end_date=end_date,
+            adjust=adjust,
+        )
+    return _standardize_daily_frame(raw, symbol)
 
 
 def ingest_stock_daily(
