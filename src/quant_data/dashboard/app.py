@@ -191,6 +191,14 @@ def build_rolling_summary(data_dir: str | Path, factor_name: str) -> pd.DataFram
     return result.reset_index(drop=True)
 
 
+def build_parameter_sensitivity(data_dir: str | Path, factor_name: str) -> pd.DataFrame:
+    root = Path(data_dir)
+    sensitivity = _read_parquet_if_exists(root / "ads" / "parameter_sensitivity.parquet")
+    if sensitivity.empty or "factor_name" not in sensitivity.columns:
+        return pd.DataFrame()
+    return sensitivity[sensitivity["factor_name"] == factor_name].reset_index(drop=True)
+
+
 def interpret_factor_strength(ic_mean: float, rank_ic_mean: float, positive_ic_ratio: float) -> str:
     if abs(ic_mean) < 0.02 and abs(rank_ic_mean) < 0.02:
         return (
@@ -511,6 +519,30 @@ def render_backtest_tab(st, data_dir: Path, factor_name: str) -> None:
     if "target_exposure" in chart_frame.columns:
         st.subheader("情绪择时仓位")
         st.line_chart(chart_frame[["target_exposure"]])
+
+    st.subheader("参数敏感性")
+    sensitivity = build_parameter_sensitivity(data_dir, factor_name)
+    if sensitivity.empty:
+        st.info("未找到参数敏感性结果，请先运行 sensitivity 或 run-all 命令。")
+    else:
+        display = sensitivity.copy()
+        percent_columns = [
+            "total_return",
+            "gross_total_return",
+            "equal_weight_total_return",
+            "hs300_total_return",
+            "hs300_excess_return",
+            "max_drawdown",
+            "total_cost",
+            "cost_drag",
+        ]
+        for column in percent_columns:
+            if column in display.columns:
+                display[column] = display[column].map(_format_percent)
+        for column in ["sharpe", "turnover"]:
+            if column in display.columns:
+                display[column] = display[column].map(_format_number)
+        st.dataframe(display, use_container_width=True, hide_index=True)
 
 
 def main() -> None:

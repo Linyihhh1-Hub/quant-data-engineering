@@ -58,6 +58,7 @@ def test_cli_run_all_writes_pipeline_outputs(tmp_path):
     assert (tmp_path / "ads" / "backtest_daily_momentum_20d.parquet").exists()
     assert (tmp_path / "ads" / "factor_yearly_summary.parquet").exists()
     assert (tmp_path / "ads" / "factor_rolling_summary.parquet").exists()
+    assert (tmp_path / "ads" / "parameter_sensitivity.parquet").exists()
 
     metrics_path = tmp_path / "ads" / "backtest_metrics_momentum_20d.json"
     assert metrics_path.exists()
@@ -222,6 +223,51 @@ def test_cli_stability_writes_yearly_and_rolling_reports(tmp_path):
     assert exit_code == 0
     assert (tmp_path / "ads" / "factor_yearly_summary.parquet").exists()
     assert (tmp_path / "ads" / "factor_rolling_summary.parquet").exists()
+
+
+def test_cli_sensitivity_writes_parameter_grid(tmp_path):
+    raw_path = tmp_path / "ods" / "stock_daily.parquet"
+    raw_path.parent.mkdir(parents=True)
+    make_pipeline_raw_frame().to_parquet(raw_path, index=False)
+
+    main(
+        [
+            "run-all",
+            "--input",
+            str(raw_path),
+            "--output-dir",
+            str(tmp_path),
+            "--factor-name",
+            "momentum_20d",
+            "--horizon",
+            "1",
+            "--groups",
+            "2",
+            "--top-quantile",
+            "0.5",
+            "--rebalance-interval",
+            "5",
+            "--min-rows-per-date",
+            "4",
+        ]
+    )
+    exit_code = main(
+        [
+            "sensitivity",
+            "--output-dir",
+            str(tmp_path),
+            "--factor-name",
+            "momentum_20d",
+            "--top-quantiles",
+            "0.5,1.0",
+            "--rebalance-intervals",
+            "5,10",
+        ]
+    )
+
+    result = pd.read_parquet(tmp_path / "ads" / "parameter_sensitivity.parquet")
+    assert exit_code == 0
+    assert len(result) == 4
 
 
 def test_cli_ingest_akshare_writes_ods_file(monkeypatch, tmp_path):

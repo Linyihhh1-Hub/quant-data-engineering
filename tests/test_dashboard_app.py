@@ -8,6 +8,7 @@ from quant_data.dashboard.app import (
     build_factor_comparison,
     build_pipeline_summary,
     build_rolling_summary,
+    build_parameter_sensitivity,
     build_yearly_summary,
     estimate_unscaled_strategy_value,
     interpret_factor_strength,
@@ -177,6 +178,20 @@ def write_dashboard_fixture(root):
     )
     yearly.to_parquet(root / "ads" / "factor_yearly_summary.parquet", index=False)
     rolling.to_parquet(root / "ads" / "factor_rolling_summary.parquet", index=False)
+    sensitivity = pd.DataFrame(
+        [
+            {
+                "factor_name": "momentum_20d",
+                "top_quantile": 0.1,
+                "rebalance_interval": 20,
+                "total_return": 0.1,
+                "hs300_excess_return": 0.07,
+                "sharpe": 1.5,
+                "max_drawdown": -0.03,
+            }
+        ]
+    )
+    sensitivity.to_parquet(root / "ads" / "parameter_sensitivity.parquet", index=False)
     backtest.to_parquet(root / "ads" / "backtest_daily_momentum_20d.parquet", index=False)
     backtest.to_parquet(root / "ads" / "backtest_daily_reversal_5d.parquet", index=False)
     (root / "ads" / "backtest_metrics_momentum_20d.json").write_text(
@@ -272,6 +287,15 @@ def test_build_rolling_summary_filters_selected_factor(tmp_path):
 
     assert result["factor_name"].tolist() == ["momentum_20d"]
     assert result.loc[0, "rolling_60d_rank_ic_mean"] == 0.1
+
+
+def test_build_parameter_sensitivity_filters_selected_factor(tmp_path):
+    write_dashboard_fixture(tmp_path)
+
+    result = build_parameter_sensitivity(tmp_path, "momentum_20d")
+
+    assert result["factor_name"].tolist() == ["momentum_20d"]
+    assert result.loc[0, "top_quantile"] == 0.1
 
 
 def test_interpret_factor_strength_returns_practical_conclusion():

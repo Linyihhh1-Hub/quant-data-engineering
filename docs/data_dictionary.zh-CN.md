@@ -292,6 +292,28 @@
 
 说明：滚动稳定性用于观察因子解释力和策略表现是否持续，降低只依赖全区间单点指标的风险。
 
+## 参数敏感性分析
+
+路径：`data/ads/parameter_sensitivity.parquet`
+
+| 字段 | 含义 | 示例 |
+| --- | --- | --- |
+| `factor_name` | 因子名称 | `momentum_20d_zscore` |
+| `top_quantile` | 调仓时选择的高因子股票比例 | `0.2` |
+| `rebalance_interval` | 调仓间隔，单位为交易日 | `20` |
+| `total_return` | 成本后策略累计收益 | `0.018` |
+| `gross_total_return` | 成本前策略累计收益 | `0.237` |
+| `equal_weight_total_return` | 股票池等权基准累计收益 | `1.198` |
+| `hs300_total_return` | 沪深 300 指数基准累计收益 | `-0.052` |
+| `hs300_excess_return` | 策略相对沪深 300 的超额收益 | `0.071` |
+| `sharpe` | 夏普比率 | `0.33` |
+| `max_drawdown` | 最大回撤 | `-0.26` |
+| `turnover` | 累计换手 | `94.86` |
+| `total_cost` | 累计交易成本估算 | `0.194` |
+| `cost_drag` | 成本侵蚀 | `0.219` |
+
+说明：参数敏感性分析用于观察策略表现是否依赖单一参数设定。当前默认网格为 `top_quantile = 0.1 / 0.2 / 0.3`，`rebalance_interval = 5 / 10 / 20`。
+
 ## 回测指标
 
 路径：`data/ads/backtest_metrics_<factor_name>.json`
@@ -326,6 +348,7 @@
 | `ads_backtest_daily` | `data/ads/backtest_daily_<factor_name>.parquet` | 回测日度结果 |
 | `ads_factor_yearly_summary` | `data/ads/factor_yearly_summary.parquet` | 因子与回测年度表现 |
 | `ads_factor_rolling_summary` | `data/ads/factor_rolling_summary.parquet` | 因子与回测滚动稳定性 |
+| `ads_parameter_sensitivity` | `data/ads/parameter_sensitivity.parquet` | 参数敏感性分析结果 |
 | `ops_ingestion_report` | `data/reports/ingestion_report.parquet` | 单只股票采集状态 |
 | `ops_ingestion_runs` | `data/reports/ingestion_runs.parquet` | 每次采集任务运行日志 |
 | `ops_data_quality_report` | `data/reports/data_quality_report.parquet` | 数据质量检查结果 |

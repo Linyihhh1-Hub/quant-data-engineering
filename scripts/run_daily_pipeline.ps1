@@ -202,6 +202,7 @@ print_frame_status("factor_eval", f"data/ads/factor_eval_{factor_name}.parquet")
 print_frame_status("backtest_daily", f"data/ads/backtest_daily_{factor_name}.parquet")
 print_frame_status("factor_yearly_summary", "data/ads/factor_yearly_summary.parquet")
 print_frame_status("factor_rolling_summary", "data/ads/factor_rolling_summary.parquet")
+print_frame_status("parameter_sensitivity", "data/ads/parameter_sensitivity.parquet")
 
 metrics_path = Path(f"data/ads/backtest_metrics_{factor_name}.json")
 if metrics_path.exists():

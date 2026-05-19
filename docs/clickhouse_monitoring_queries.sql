@@ -22,6 +22,8 @@ SELECT 'ads_factor_yearly_summary', count() FROM ads_factor_yearly_summary
 UNION ALL
 SELECT 'ads_factor_rolling_summary', count() FROM ads_factor_rolling_summary
 UNION ALL
+SELECT 'ads_parameter_sensitivity', count() FROM ads_parameter_sensitivity
+UNION ALL
 SELECT 'ops_ingestion_report', count() FROM ops_ingestion_report
 UNION ALL
 SELECT 'ops_ingestion_runs', count() FROM ops_ingestion_runs
@@ -140,7 +142,22 @@ FROM ads_factor_rolling_summary
 ORDER BY trade_date DESC, factor_name
 LIMIT 50;
 
--- 9.3 Inspect recent market sentiment values.
+-- 9.3 Inspect parameter sensitivity grid.
+SELECT
+    factor_name,
+    top_quantile,
+    rebalance_interval,
+    total_return,
+    gross_total_return,
+    hs300_excess_return,
+    sharpe,
+    max_drawdown,
+    turnover,
+    cost_drag
+FROM ads_parameter_sensitivity
+ORDER BY factor_name, top_quantile, rebalance_interval;
+
+-- 9.4 Inspect recent market sentiment values.
 SELECT
     trade_date,
     market_up_ratio,

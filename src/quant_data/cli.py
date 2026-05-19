@@ -8,6 +8,9 @@ from quant_data.dimensions.market import write_hs300_symbol_pool
 from quant_data.dimensions.market import write_stock_basic
 from quant_data.dimensions.market import write_trade_calendar
 from quant_data.evaluation.factor import evaluate_factor
+from quant_data.evaluation.sensitivity import parse_float_list
+from quant_data.evaluation.sensitivity import parse_int_list
+from quant_data.evaluation.sensitivity import write_parameter_sensitivity
 from quant_data.evaluation.stability import write_stability_reports
 from quant_data.factors.baseline import compute_baseline_factors
 from quant_data.factors.baseline import FACTOR_COLUMNS
@@ -221,6 +224,34 @@ def run_stability(
     return write_stability_reports(output_dir, factor_names, rank_ic_window, return_window)
 
 
+def run_sensitivity(
+    output_dir: Path,
+    factor_name: str,
+    top_quantiles: list[float],
+    rebalance_intervals: list[int],
+    transaction_cost: float,
+    commission_rate: float,
+    slippage_rate: float,
+    stamp_tax_rate: float,
+    sentiment_threshold: float | None = None,
+    weak_sentiment_exposure: float = 0.5,
+    normal_exposure: float = 1.0,
+) -> Path:
+    return write_parameter_sensitivity(
+        output_dir,
+        factor_name,
+        top_quantiles,
+        rebalance_intervals,
+        transaction_cost,
+        commission_rate,
+        slippage_rate,
+        stamp_tax_rate,
+        sentiment_threshold,
+        weak_sentiment_exposure,
+        normal_exposure,
+    )
+
+
 def run_load_clickhouse(
     output_dir: Path,
     factor_name: str,
@@ -327,6 +358,19 @@ def build_parser() -> argparse.ArgumentParser:
     stability.add_argument("--rank-ic-window", type=int, default=60)
     stability.add_argument("--return-window", type=int, default=120)
 
+    sensitivity = subparsers.add_parser("sensitivity")
+    add_common(sensitivity)
+    sensitivity.add_argument("--factor-name", default="momentum_20d_zscore")
+    sensitivity.add_argument("--top-quantiles", default="0.1,0.2,0.3")
+    sensitivity.add_argument("--rebalance-intervals", default="5,10,20")
+    sensitivity.add_argument("--transaction-cost", type=float, default=0.001)
+    sensitivity.add_argument("--commission-rate", type=float, default=0.0003)
+    sensitivity.add_argument("--slippage-rate", type=float, default=0.0005)
+    sensitivity.add_argument("--stamp-tax-rate", type=float, default=0.0005)
+    sensitivity.add_argument("--sentiment-threshold", type=float)
+    sensitivity.add_argument("--weak-sentiment-exposure", type=float, default=0.5)
+    sensitivity.add_argument("--normal-exposure", type=float, default=1.0)
+
     load_clickhouse = subparsers.add_parser("load-clickhouse")
     add_common(load_clickhouse)
     load_clickhouse.add_argument("--factor-name", default="momentum_20d_zscore")
@@ -423,6 +467,20 @@ def main(argv: list[str] | None = None) -> int:
         run_stability(args.output_dir, _parse_factor_names(args.factor_names))
     elif args.command == "stability":
         run_stability(args.output_dir, _parse_factor_names(args.factor_names), args.rank_ic_window, args.return_window)
+    elif args.command == "sensitivity":
+        run_sensitivity(
+            args.output_dir,
+            args.factor_name,
+            parse_float_list(args.top_quantiles),
+            parse_int_list(args.rebalance_intervals),
+            args.transaction_cost,
+            args.commission_rate,
+            args.slippage_rate,
+            args.stamp_tax_rate,
+            args.sentiment_threshold,
+            args.weak_sentiment_exposure,
+            args.normal_exposure,
+        )
     elif args.command == "load-clickhouse":
         run_load_clickhouse(
             args.output_dir,
@@ -452,6 +510,19 @@ def main(argv: list[str] | None = None) -> int:
             args.normal_exposure,
         )
         run_stability(args.output_dir, [args.factor_name])
+        run_sensitivity(
+            args.output_dir,
+            args.factor_name,
+            [0.1, 0.2, 0.3],
+            [5, 10, 20],
+            args.transaction_cost,
+            args.commission_rate,
+            args.slippage_rate,
+            args.stamp_tax_rate,
+            args.sentiment_threshold,
+            args.weak_sentiment_exposure,
+            args.normal_exposure,
+        )
     return 0
 
 
