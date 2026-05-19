@@ -279,15 +279,18 @@ def render_pipeline_tab(st, data_dir: Path) -> None:
                 "text",
             ),
             (
-                "采集状态",
-                f'{summary["ingestion_success_count"]} / {summary["ingestion_skipped_count"]} / {summary["ingestion_abnormal_count"]}',
+                "质量状态",
+                f'{summary["quality_pass_count"]} / {summary["quality_pass_count"] + summary["quality_fail_count"]} 通过',
                 "text",
             ),
-            (
-                "质量",
-                f'{summary["quality_pass_count"]} PASS / {summary["quality_fail_count"]} FAIL',
-                "text",
-            ),
+        ],
+    )
+    _metric_row(
+        st,
+        [
+            ("成功", _format_metric_int(summary["ingestion_success_count"]), "text"),
+            ("跳过", _format_metric_int(summary["ingestion_skipped_count"]), "text"),
+            ("异常", _format_metric_int(summary["ingestion_abnormal_count"]), "text"),
         ],
     )
     st.caption("采集状态依次为：成功 / 跳过 / 异常。SKIPPED 表示本地数据已覆盖目标日期范围，本次增量采集跳过，不代表采集失败。")
@@ -300,10 +303,10 @@ def render_pipeline_tab(st, data_dir: Path) -> None:
         ],
     )
 
-    st.subheader("采集异常列表")
+    st.subheader("采集异常 / 空返回列表")
     abnormal_symbols = summary["abnormal_symbols"]
     if abnormal_symbols.empty:
-        st.info("当前没有采集异常。")
+        st.info("当前没有采集异常或空返回。")
     else:
         columns = [column for column in ["symbol", "status", "row_count", "message"] if column in abnormal_symbols.columns]
         st.dataframe(abnormal_symbols[columns], use_container_width=True, hide_index=True)
@@ -362,11 +365,11 @@ def render_factor_tab(st, data_dir: Path, factor_name: str) -> None:
         if column in evaluation.columns
     ]
     if group_columns:
-        group_returns = evaluation[group_columns].mean().rename(
+        group_returns = pd.Series(
             {
-                "top_group_return": "Top 组",
-                "bottom_group_return": "Bottom 组",
-                "long_short_return": "Top-Bottom",
+                "Top组": evaluation["top_group_return"].mean(),
+                "Bottom组": evaluation["bottom_group_return"].mean(),
+                "Top-Bottom": evaluation["long_short_return"].mean(),
             }
         )
         st.bar_chart(group_returns)
