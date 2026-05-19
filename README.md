@@ -48,7 +48,12 @@ Streamlit dashboard
 - AkShare daily data ingestion with stock pool files, retry, incremental updates, run logs, and fallback handling.
 - Layered Parquet datasets for ODS, DWD, ADS, reports, and dimension tables.
 - Data quality checks for primary key uniqueness, required fields, price validity, volume validity, date completeness, and abnormal returns.
-- Baseline price-volume factors: `momentum_20d`, `reversal_5d`, `volatility_20d`, `volume_ratio_5d`, `ma_bias_20d`.
+- Baseline price-volume factors:
+  - `momentum_20d`
+  - `reversal_5d`
+  - `volatility_20d`
+  - `volume_ratio_5d`
+  - `ma_bias_20d`
 - Market sentiment factors such as market breadth, trading activity, profit effect, and rolling sentiment score.
 - Multi-factor evaluation with IC, RankIC, positive IC ratio, ICIR, grouped returns, and long-short return.
 - Factor backtest with next-trading-day execution, rebalance interval, transaction costs, slippage, stamp tax, suspension handling, and limit-up / limit-down constraints.
@@ -84,7 +89,7 @@ Run tests:
 python -m pytest -q
 ```
 
-Run the daily local pipeline:
+Run the one-command local pipeline:
 
 ```powershell
 .\scripts\run_daily_pipeline.ps1 -StartDate 20240101 -EndDate 20241231
