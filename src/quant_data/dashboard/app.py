@@ -115,6 +115,13 @@ def list_available_factors(data_dir: str | Path = "data") -> list[str]:
     return factors
 
 
+def default_factor_index(factors: list[str]) -> int:
+    for preferred in ["momentum_20d_zscore", "momentum_20d"]:
+        if preferred in factors:
+            return factors.index(preferred)
+    return 0
+
+
 def build_factor_comparison(data_dir: str | Path = "data") -> pd.DataFrame:
     rows = []
     for factor_name in list_available_factors(data_dir):
@@ -523,7 +530,12 @@ def render_backtest_tab(st, data_dir: Path, factor_name: str) -> None:
     st.subheader("参数敏感性")
     sensitivity = build_parameter_sensitivity(data_dir, factor_name)
     if sensitivity.empty:
-        st.info("未找到参数敏感性结果，请先运行 sensitivity 或 run-all 命令。")
+        available = _read_parquet_if_exists(Path(data_dir) / "ads" / "parameter_sensitivity.parquet")
+        if available.empty or "factor_name" not in available.columns:
+            st.info("未找到参数敏感性结果，请先运行 sensitivity 或 run-all 命令。")
+        else:
+            names = ", ".join(sorted(available["factor_name"].dropna().astype(str).unique()))
+            st.info(f"当前因子没有参数敏感性结果。已有结果因子：{names}")
     else:
         display = sensitivity.copy()
         percent_columns = [
@@ -556,7 +568,7 @@ def main() -> None:
     if not factors:
         st.warning("未找到因子评估文件，请先运行数据流水线。")
         return
-    factor_name = st.sidebar.selectbox("因子", factors, index=0)
+    factor_name = st.sidebar.selectbox("因子", factors, index=default_factor_index(factors))
 
     tabs = st.tabs(["数据链路概览", "因子有效性评估", "策略回测表现"])
     with tabs[0]:

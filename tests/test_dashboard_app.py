@@ -10,6 +10,7 @@ from quant_data.dashboard.app import (
     build_rolling_summary,
     build_parameter_sensitivity,
     build_yearly_summary,
+    default_factor_index,
     estimate_unscaled_strategy_value,
     interpret_factor_strength,
     list_available_factors,
@@ -257,6 +258,12 @@ def test_list_available_factors_uses_factor_eval_files(tmp_path):
     write_dashboard_fixture(tmp_path)
 
     assert list_available_factors(tmp_path) == ["momentum_20d", "reversal_5d"]
+
+
+def test_default_factor_index_prefers_standardized_momentum():
+    factors = ["ma_bias_20d", "momentum_20d", "momentum_20d_zscore"]
+
+    assert default_factor_index(factors) == 2
 
 
 def test_build_factor_comparison_summarizes_all_available_factors(tmp_path):
