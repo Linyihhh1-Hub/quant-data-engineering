@@ -56,6 +56,7 @@ Streamlit dashboard
   - `ma_bias_20d`
 - Market sentiment factors such as market breadth, trading activity, profit effect, and rolling sentiment score.
 - Multi-factor evaluation with IC, RankIC, positive IC ratio, ICIR, grouped returns, and long-short return.
+- Yearly and rolling-window stability reports for factor IC, RankIC, excess return, drawdown, Sharpe, and turnover.
 - Factor backtest with next-trading-day execution, rebalance interval, transaction costs, slippage, stamp tax, suspension handling, and limit-up / limit-down constraints.
 - ClickHouse loading and query interface for local analytical use.
 - Streamlit dashboard with data pipeline overview, factor evaluation, and strategy backtest performance.
@@ -174,6 +175,8 @@ data/ads/market_sentiment_daily.parquet
 data/ads/factor_eval_<factor_name>.parquet
 data/ads/backtest_daily_<factor_name>.parquet
 data/ads/backtest_metrics_<factor_name>.json
+data/ads/factor_yearly_summary.parquet
+data/ads/factor_rolling_summary.parquet
 ```
 
 When ClickHouse loading is enabled, the main analytical tables are:
@@ -186,6 +189,8 @@ ads_factor_wide_daily
 ads_market_sentiment_daily
 ads_factor_eval
 ads_backtest_daily
+ads_factor_yearly_summary
+ads_factor_rolling_summary
 ops_ingestion_report
 ops_ingestion_runs
 ops_data_quality_report
@@ -205,6 +210,7 @@ Use live AkShare data only when running ingestion or the daily pipeline in a loc
 
 - The backtest is research-oriented and simplified. It is intended to validate factor and data-pipeline behavior, not to represent live trading performance.
 - Live market data depends on AkShare and upstream data-source availability.
+- The current stock pool can be rebuilt from the latest CSI 300 constituents. Historical constituent changes are not fully reconstructed, so long-period backtests may still contain survivorship-bias risk.
 - Generated datasets under `data/` are not committed to Git. A new user needs to run the pipeline locally before using the dashboard.
 - Transaction cost, suspension, and limit-up / limit-down handling are simplified engineering assumptions and should be reviewed before any production use.
 - The dashboard reads local Parquet and JSON outputs. It is designed for local inspection rather than multi-user deployment.

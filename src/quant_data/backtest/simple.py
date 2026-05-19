@@ -195,6 +195,8 @@ def run_simple_backtest(
 
     for index, trade_date in enumerate(trade_dates):
         timestamp = pd.Timestamp(trade_date)
+        daily_turnover = 0.0
+        daily_cost_rate = 0.0
 
         if timestamp in rebalance_dates:
             signal_date = next(signal for signal, execution in execution_dates.items() if execution == timestamp)
@@ -222,12 +224,16 @@ def run_simple_backtest(
                 portfolio_value *= 1 - cost_rate
                 total_turnover += turnover
                 total_cost += cost_rate
+                daily_turnover = turnover
+                daily_cost_rate = cost_rate
             elif new_positions:
                 turnover = 1.0
                 cost_rate = turnover * (transaction_cost + commission_rate + slippage_rate)
                 portfolio_value *= 1 - cost_rate
                 total_turnover += turnover
                 total_cost += cost_rate
+                daily_turnover = turnover
+                daily_cost_rate = cost_rate
             current_positions = new_positions
 
         raw_portfolio_return = 0.0 if index == 0 else _portfolio_return_for_date(returns, timestamp, current_positions)
@@ -248,6 +254,8 @@ def run_simple_backtest(
                 "benchmark_return": benchmark_return,
                 "positions_count": len(current_positions),
                 "target_exposure": target_exposure,
+                "daily_turnover": daily_turnover,
+                "daily_cost_rate": daily_cost_rate,
             }
         )
 
@@ -274,5 +282,7 @@ def run_simple_backtest(
             "drawdown",
             "positions_count",
             "target_exposure",
+            "daily_turnover",
+            "daily_cost_rate",
         ]
     ], metrics

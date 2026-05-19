@@ -69,6 +69,8 @@ def load_pipeline_outputs(client, data_dir: str | Path, factor_name: str) -> dic
     optional_table_files = {
         "dim_trade_calendar": root / "dim" / "trade_calendar.parquet",
         "dim_stock_basic": root / "dim" / "stock_basic.parquet",
+        "ads_factor_yearly_summary": root / "ads" / "factor_yearly_summary.parquet",
+        "ads_factor_rolling_summary": root / "ads" / "factor_rolling_summary.parquet",
         "ops_ingestion_report": root / "reports" / "ingestion_report.parquet",
         "ops_ingestion_runs": root / "reports" / "ingestion_runs.parquet",
         "ops_data_quality_report": root / "reports" / "data_quality_report.parquet",

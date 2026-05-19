@@ -105,6 +105,8 @@ def test_load_pipeline_outputs_loads_ops_tables_when_reports_exist(tmp_path):
     quality = pd.DataFrame({"rule_name": ["primary_key_unique"], "status": ["PASS"], "failed_count": [0], "failed_sample": [""]})
     calendar = pd.DataFrame({"trade_date": [pd.Timestamp("2024-01-02")], "is_open": [True]})
     stock_basic = pd.DataFrame({"symbol": ["000001.SZ"], "raw_symbol": ["000001"], "name": ["平安银行"], "exchange": ["SZ"], "is_st": [False]})
+    yearly = pd.DataFrame({"year": [2024], "factor_name": ["momentum_20d"], "ic_mean": [0.1]})
+    rolling = pd.DataFrame({"trade_date": [pd.Timestamp("2024-01-02")], "factor_name": ["momentum_20d"], "rolling_60d_rank_ic_mean": [0.1]})
 
     (tmp_path / "reports").mkdir()
     (tmp_path / "dim").mkdir()
@@ -113,17 +115,23 @@ def test_load_pipeline_outputs_loads_ops_tables_when_reports_exist(tmp_path):
     quality.to_parquet(tmp_path / "reports" / "data_quality_report.parquet", index=False)
     calendar.to_parquet(tmp_path / "dim" / "trade_calendar.parquet", index=False)
     stock_basic.to_parquet(tmp_path / "dim" / "stock_basic.parquet", index=False)
+    yearly.to_parquet(tmp_path / "ads" / "factor_yearly_summary.parquet", index=False)
+    rolling.to_parquet(tmp_path / "ads" / "factor_rolling_summary.parquet", index=False)
 
     loaded = load_pipeline_outputs(client, tmp_path, factor_name="momentum_20d")
 
     assert loaded["dim_trade_calendar"] == 1
     assert loaded["dim_stock_basic"] == 1
+    assert loaded["ads_factor_yearly_summary"] == 1
+    assert loaded["ads_factor_rolling_summary"] == 1
     assert loaded["ops_ingestion_report"] == 1
     assert loaded["ops_ingestion_runs"] == 1
     assert loaded["ops_data_quality_report"] == 1
-    assert [table for table, _ in client.inserts][-5:] == [
+    assert [table for table, _ in client.inserts][-7:] == [
         "dim_trade_calendar",
         "dim_stock_basic",
+        "ads_factor_yearly_summary",
+        "ads_factor_rolling_summary",
         "ops_ingestion_report",
         "ops_ingestion_runs",
         "ops_data_quality_report",

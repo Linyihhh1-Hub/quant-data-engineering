@@ -7,6 +7,8 @@ from quant_data.dashboard.app import (
     build_factor_summary,
     build_factor_comparison,
     build_pipeline_summary,
+    build_rolling_summary,
+    build_yearly_summary,
     estimate_unscaled_strategy_value,
     interpret_factor_strength,
     list_available_factors,
@@ -114,6 +116,58 @@ def write_dashboard_fixture(root):
     reversal_eval["rank_ic"] = [0.03, 0.01]
     reversal_eval["long_short_return"] = [0.03, 0.02]
     reversal_eval.to_parquet(root / "ads" / "factor_eval_reversal_5d.parquet", index=False)
+    yearly = pd.DataFrame(
+        [
+            {
+                "year": 2024,
+                "factor_name": "momentum_20d",
+                "ic_mean": 0.025,
+                "rank_ic_mean": 0.1,
+                "positive_ic_ratio": 0.5,
+                "icir": 0.2,
+                "total_return": 0.1,
+                "benchmark_total_return": 0.05,
+                "excess_return": 0.05,
+                "max_drawdown": -0.03,
+                "sharpe": 1.5,
+                "turnover": 2.0,
+            },
+            {
+                "year": 2024,
+                "factor_name": "reversal_5d",
+                "ic_mean": 0.03,
+                "rank_ic_mean": 0.02,
+                "positive_ic_ratio": 1.0,
+                "icir": 0.3,
+                "total_return": 0.2,
+                "benchmark_total_return": 0.05,
+                "excess_return": 0.15,
+                "max_drawdown": -0.02,
+                "sharpe": 2.0,
+                "turnover": 1.0,
+            },
+        ]
+    )
+    rolling = pd.DataFrame(
+        [
+            {
+                "trade_date": pd.Timestamp("2024-01-01"),
+                "factor_name": "momentum_20d",
+                "rolling_60d_rank_ic_mean": 0.1,
+                "rolling_120d_excess_return": 0.03,
+                "rolling_120d_max_drawdown": -0.02,
+            },
+            {
+                "trade_date": pd.Timestamp("2024-01-02"),
+                "factor_name": "reversal_5d",
+                "rolling_60d_rank_ic_mean": 0.2,
+                "rolling_120d_excess_return": 0.04,
+                "rolling_120d_max_drawdown": -0.01,
+            },
+        ]
+    )
+    yearly.to_parquet(root / "ads" / "factor_yearly_summary.parquet", index=False)
+    rolling.to_parquet(root / "ads" / "factor_rolling_summary.parquet", index=False)
     backtest.to_parquet(root / "ads" / "backtest_daily_momentum_20d.parquet", index=False)
     backtest.to_parquet(root / "ads" / "backtest_daily_reversal_5d.parquet", index=False)
     (root / "ads" / "backtest_metrics_momentum_20d.json").write_text(
@@ -188,6 +242,25 @@ def test_build_factor_comparison_summarizes_all_available_factors(tmp_path):
     assert "ic_mean" in comparison.columns
     assert "excess_return" in comparison.columns
     assert comparison.loc[0, "total_return"] == 0.2
+
+
+def test_build_yearly_summary_filters_selected_factor(tmp_path):
+    write_dashboard_fixture(tmp_path)
+
+    result = build_yearly_summary(tmp_path, "momentum_20d")
+
+    assert result["factor_name"].tolist() == ["momentum_20d"]
+    assert result.loc[0, "year"] == 2024
+    assert result.loc[0, "excess_return"] == 0.05
+
+
+def test_build_rolling_summary_filters_selected_factor(tmp_path):
+    write_dashboard_fixture(tmp_path)
+
+    result = build_rolling_summary(tmp_path, "momentum_20d")
+
+    assert result["factor_name"].tolist() == ["momentum_20d"]
+    assert result.loc[0, "rolling_60d_rank_ic_mean"] == 0.1
 
 
 def test_interpret_factor_strength_returns_practical_conclusion():

@@ -227,10 +227,11 @@ def test_ingest_stock_daily_incremental_fetches_only_missing_dates(monkeypatch, 
     result = pd.read_parquet(result_path)
     report = pd.read_parquet(report_path)
     assert calls == [
+        {"symbol": "000001", "start_date": "20240101", "end_date": "20240101"},
         {"symbol": "000001", "start_date": "20240103", "end_date": "20240105"},
         {"symbol": "600000", "start_date": "20240101", "end_date": "20240105"},
     ]
-    assert len(result) == 3
+    assert len(result) == 4
     assert result.duplicated(subset=["trade_date", "symbol"]).sum() == 0
     assert report["status"].tolist() == ["SUCCESS", "SUCCESS"]
 

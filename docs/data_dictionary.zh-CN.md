@@ -8,7 +8,7 @@
 
 ```powershell
 .\scripts\run_daily_pipeline.ps1 `
-  -StartDate 20240101 `
+  -StartDate 20200101 `
   -EndDate 20241231
 ```
 
@@ -27,7 +27,7 @@
 
 - `symbol` 是必填列。
 - `name` 不是程序必需字段，只是方便维护。
-- 当前股票池包含 20 只样例股票，覆盖银行、地产、消费、医药、券商、新能源、科技等方向。
+- 当前股票池可维护为沪深 300 成分股，适合覆盖多行业和不同市值层级。
 - 可以通过 `build-hs300-symbols` 命令把股票池更新为沪深 300 成分股，并默认过滤 ST 股票。
 - 批量真实采集时，如果采集报告出现 `FAILED`，可以对失败股票单独重试，再合并数据。
 - 日常更新建议开启增量采集，只补采每只股票已有最大日期之后的数据，减少外部接口压力。
@@ -48,7 +48,7 @@
 - `SUCCESS`：成功采集到非空行情数据。
 - `FAILED`：接口调用异常或字段不符合预期。
 - `EMPTY`：接口正常返回，但没有行情行。
-- `SKIPPED`：增量采集时，本地已有数据已经覆盖请求结束日期，无需再次请求。
+- `SKIPPED`：增量采集时，本地已有数据已经覆盖请求起止区间，无需再次请求。
 
 ## 采集运行日志
 
@@ -231,8 +231,46 @@
 | `drawdown` | 策略当前回撤，等于 `portfolio_value / 历史最高净值 - 1` | `-0.08` |
 | `positions_count` | 当日持仓股票数量 | `20` |
 | `target_exposure` | 情绪择时后的目标仓位，默认 1.0；低情绪时可降为 0.3、0.5 等 | `0.3` |
+| `daily_turnover` | 当日调仓换手，非调仓日为 0 | `0.8` |
+| `daily_cost_rate` | 当日交易成本扣减比例，非调仓日为 0 | `0.0012` |
 
 说明：当前回测是研究型简化回测，主要用于验证因子数据链路、调仓逻辑和结果产出，不等同于可实盘交易策略。开启情绪择时时，`target_exposure` 使用调仓信号日的 `market_sentiment_score` 决定，并在下一交易日执行，避免未来函数。
+
+## 年度表现汇总
+
+路径：`data/ads/factor_yearly_summary.parquet`
+
+| 字段 | 含义 | 示例 |
+| --- | --- | --- |
+| `year` | 统计年份 | `2024` |
+| `factor_name` | 因子名称 | `momentum_20d` |
+| `ic_mean` | 当年 IC 均值 | `0.012` |
+| `rank_ic_mean` | 当年 RankIC 均值 | `0.018` |
+| `positive_ic_ratio` | 当年正 IC 占比 | `0.53` |
+| `icir` | 当年 IC 均值 / IC 标准差 | `0.11` |
+| `total_return` | 当年策略净值区间收益 | `0.08` |
+| `benchmark_total_return` | 当年等权基准区间收益 | `0.04` |
+| `excess_return` | 当年超额收益 | `0.04` |
+| `max_drawdown` | 当年策略最大回撤 | `-0.10` |
+| `sharpe` | 当年策略日收益年化夏普 | `0.9` |
+| `turnover` | 当年累计换手 | `18.5` |
+| `full_period_turnover` | 全区间累计换手，用于和年度换手口径区分 | `103.3` |
+
+说明：年度汇总用于观察因子是否只在某一年有效，避免只看单一区间的平均结论。
+
+## 滚动稳定性汇总
+
+路径：`data/ads/factor_rolling_summary.parquet`
+
+| 字段 | 含义 | 示例 |
+| --- | --- | --- |
+| `trade_date` | 统计日期 | `2024-12-31` |
+| `factor_name` | 因子名称 | `momentum_20d` |
+| `rolling_60d_rank_ic_mean` | 60 日滚动 RankIC 均值 | `0.015` |
+| `rolling_120d_excess_return` | 120 日滚动超额收益 | `0.06` |
+| `rolling_120d_max_drawdown` | 120 日滚动最大回撤 | `-0.08` |
+
+说明：滚动稳定性用于观察因子解释力和策略表现是否持续，降低只依赖全区间单点指标的风险。
 
 ## 回测指标
 
@@ -259,6 +297,8 @@
 | `ads_market_sentiment_daily` | `data/ads/market_sentiment_daily.parquet` | 市场情绪因子表 |
 | `ads_factor_eval` | `data/ads/factor_eval_<factor_name>.parquet` | 因子评估结果 |
 | `ads_backtest_daily` | `data/ads/backtest_daily_<factor_name>.parquet` | 回测日度结果 |
+| `ads_factor_yearly_summary` | `data/ads/factor_yearly_summary.parquet` | 因子与回测年度表现 |
+| `ads_factor_rolling_summary` | `data/ads/factor_rolling_summary.parquet` | 因子与回测滚动稳定性 |
 | `ops_ingestion_report` | `data/reports/ingestion_report.parquet` | 单只股票采集状态 |
 | `ops_ingestion_runs` | `data/reports/ingestion_runs.parquet` | 每次采集任务运行日志 |
 | `ops_data_quality_report` | `data/reports/data_quality_report.parquet` | 数据质量检查结果 |

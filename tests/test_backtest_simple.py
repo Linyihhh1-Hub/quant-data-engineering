@@ -71,6 +71,8 @@ def test_run_simple_backtest_returns_daily_series_and_metrics():
         "drawdown",
         "positions_count",
         "target_exposure",
+        "daily_turnover",
+        "daily_cost_rate",
     ]
     assert daily_result.loc[0, "portfolio_value"] == 1.0
     assert daily_result.loc[0, "benchmark_value"] == 1.0

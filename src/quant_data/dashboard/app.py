@@ -171,6 +171,26 @@ def build_factor_summary(data_dir: str | Path, factor_name: str) -> dict[str, ob
     }
 
 
+def build_yearly_summary(data_dir: str | Path, factor_name: str) -> pd.DataFrame:
+    root = Path(data_dir)
+    yearly = _read_parquet_if_exists(root / "ads" / "factor_yearly_summary.parquet")
+    if yearly.empty or "factor_name" not in yearly.columns:
+        return pd.DataFrame()
+    return yearly[yearly["factor_name"] == factor_name].sort_values("year").reset_index(drop=True)
+
+
+def build_rolling_summary(data_dir: str | Path, factor_name: str) -> pd.DataFrame:
+    root = Path(data_dir)
+    rolling = _read_parquet_if_exists(root / "ads" / "factor_rolling_summary.parquet")
+    if rolling.empty or "factor_name" not in rolling.columns:
+        return pd.DataFrame()
+    result = rolling[rolling["factor_name"] == factor_name].copy()
+    if "trade_date" in result.columns:
+        result["trade_date"] = pd.to_datetime(result["trade_date"])
+        result = result.sort_values("trade_date")
+    return result.reset_index(drop=True)
+
+
 def interpret_factor_strength(ic_mean: float, rank_ic_mean: float, positive_ic_ratio: float) -> str:
     if abs(ic_mean) < 0.02 and abs(rank_ic_mean) < 0.02:
         return (
@@ -293,7 +313,7 @@ def render_pipeline_tab(st, data_dir: Path) -> None:
             ("异常", _format_metric_int(summary["ingestion_abnormal_count"]), "text"),
         ],
     )
-    st.caption("采集状态依次为：成功 / 跳过 / 异常。SKIPPED 表示本地数据已覆盖目标日期范围，本次增量采集跳过，不代表采集失败。")
+    st.caption("采集状态依次为：成功 / 跳过 / 异常。SKIPPED 表示本地数据已覆盖目标起止日期范围，本次增量采集跳过，不代表采集失败。")
     _metric_row(
         st,
         [
@@ -375,6 +395,44 @@ def render_factor_tab(st, data_dir: Path, factor_name: str) -> None:
         st.bar_chart(group_returns)
     else:
         st.info("评估结果中没有分组收益字段。")
+
+    yearly = build_yearly_summary(data_dir, factor_name)
+    st.subheader("年度表现")
+    if yearly.empty:
+        st.info("未找到年度表现汇总，请先运行 factor-suite 或 stability 命令。")
+    else:
+        display = yearly.copy()
+        percent_columns = [
+            "positive_ic_ratio",
+            "total_return",
+            "benchmark_total_return",
+            "excess_return",
+            "max_drawdown",
+        ]
+        for column in percent_columns:
+            if column in display.columns:
+                display[column] = display[column].map(_format_percent)
+        for column in ["ic_mean", "rank_ic_mean", "icir", "sharpe", "turnover", "full_period_turnover"]:
+            if column in display.columns:
+                display[column] = display[column].map(_format_number)
+        st.dataframe(display, use_container_width=True, hide_index=True)
+
+    rolling = build_rolling_summary(data_dir, factor_name)
+    st.subheader("滚动稳定性")
+    if rolling.empty:
+        st.info("未找到滚动稳定性汇总，请先运行 factor-suite 或 stability 命令。")
+    else:
+        chart_frame = rolling.set_index("trade_date")
+        columns = [
+            column
+            for column in [
+                "rolling_60d_rank_ic_mean",
+                "rolling_120d_excess_return",
+                "rolling_120d_max_drawdown",
+            ]
+            if column in chart_frame.columns
+        ]
+        st.line_chart(chart_frame[columns])
 
 
 def render_backtest_tab(st, data_dir: Path, factor_name: str) -> None:

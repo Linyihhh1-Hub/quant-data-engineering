@@ -16,6 +16,10 @@ SELECT 'ads_factor_eval', count() FROM ads_factor_eval
 UNION ALL
 SELECT 'ads_backtest_daily', count() FROM ads_backtest_daily
 UNION ALL
+SELECT 'ads_factor_yearly_summary', count() FROM ads_factor_yearly_summary
+UNION ALL
+SELECT 'ads_factor_rolling_summary', count() FROM ads_factor_rolling_summary
+UNION ALL
 SELECT 'ops_ingestion_report', count() FROM ops_ingestion_report
 UNION ALL
 SELECT 'ops_ingestion_runs', count() FROM ops_ingestion_runs
@@ -101,7 +105,33 @@ FROM ads_factor_eval
 ORDER BY trade_date DESC
 LIMIT 20;
 
--- 9.1 Inspect recent market sentiment values.
+-- 9.1 Inspect yearly factor and backtest stability.
+SELECT
+    year,
+    factor_name,
+    ic_mean,
+    rank_ic_mean,
+    positive_ic_ratio,
+    total_return,
+    excess_return,
+    max_drawdown,
+    sharpe,
+    turnover
+FROM ads_factor_yearly_summary
+ORDER BY factor_name, year;
+
+-- 9.2 Inspect recent rolling stability values.
+SELECT
+    trade_date,
+    factor_name,
+    rolling_60d_rank_ic_mean,
+    rolling_120d_excess_return,
+    rolling_120d_max_drawdown
+FROM ads_factor_rolling_summary
+ORDER BY trade_date DESC, factor_name
+LIMIT 50;
+
+-- 9.3 Inspect recent market sentiment values.
 SELECT
     trade_date,
     market_up_ratio,

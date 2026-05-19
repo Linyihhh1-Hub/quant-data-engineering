@@ -56,6 +56,8 @@ def test_cli_run_all_writes_pipeline_outputs(tmp_path):
     assert (tmp_path / "ads" / "market_sentiment_daily.parquet").exists()
     assert (tmp_path / "ads" / "factor_eval_momentum_20d.parquet").exists()
     assert (tmp_path / "ads" / "backtest_daily_momentum_20d.parquet").exists()
+    assert (tmp_path / "ads" / "factor_yearly_summary.parquet").exists()
+    assert (tmp_path / "ads" / "factor_rolling_summary.parquet").exists()
 
     metrics_path = tmp_path / "ads" / "backtest_metrics_momentum_20d.json"
     assert metrics_path.exists()
@@ -163,8 +165,57 @@ def test_cli_factor_suite_writes_outputs_for_multiple_factors(tmp_path):
     assert (tmp_path / "ads" / "factor_eval_reversal_5d.parquet").exists()
     assert (tmp_path / "ads" / "backtest_daily_momentum_20d.parquet").exists()
     assert (tmp_path / "ads" / "backtest_daily_reversal_5d.parquet").exists()
+    yearly = pd.read_parquet(tmp_path / "ads" / "factor_yearly_summary.parquet")
+    rolling = pd.read_parquet(tmp_path / "ads" / "factor_rolling_summary.parquet")
+    assert set(yearly["factor_name"].unique()) == {"momentum_20d", "reversal_5d"}
+    assert set(rolling["factor_name"].unique()) == {"momentum_20d", "reversal_5d"}
     metrics = json.loads((tmp_path / "ads" / "backtest_metrics_reversal_5d.json").read_text(encoding="utf-8"))
     assert "average_exposure" in metrics
+
+
+def test_cli_stability_writes_yearly_and_rolling_reports(tmp_path):
+    raw_path = tmp_path / "ods" / "stock_daily.parquet"
+    raw_path.parent.mkdir(parents=True)
+    make_pipeline_raw_frame().to_parquet(raw_path, index=False)
+
+    main(
+        [
+            "run-all",
+            "--input",
+            str(raw_path),
+            "--output-dir",
+            str(tmp_path),
+            "--factor-name",
+            "momentum_20d",
+            "--horizon",
+            "1",
+            "--groups",
+            "2",
+            "--top-quantile",
+            "0.5",
+            "--rebalance-interval",
+            "5",
+            "--min-rows-per-date",
+            "4",
+        ]
+    )
+    exit_code = main(
+        [
+            "stability",
+            "--output-dir",
+            str(tmp_path),
+            "--factor-names",
+            "momentum_20d",
+            "--rank-ic-window",
+            "5",
+            "--return-window",
+            "10",
+        ]
+    )
+
+    assert exit_code == 0
+    assert (tmp_path / "ads" / "factor_yearly_summary.parquet").exists()
+    assert (tmp_path / "ads" / "factor_rolling_summary.parquet").exists()
 
 
 def test_cli_ingest_akshare_writes_ods_file(monkeypatch, tmp_path):

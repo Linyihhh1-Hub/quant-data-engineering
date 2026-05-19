@@ -27,16 +27,24 @@ def _format_akshare_date(value: pd.Timestamp) -> str:
     return value.strftime("%Y%m%d")
 
 
-def _next_fetch_start(existing: pd.DataFrame, symbol: str, requested_start: str) -> str:
+def _incremental_fetch_ranges(existing: pd.DataFrame, symbol: str, requested_start: str, requested_end: str) -> list[tuple[str, str]]:
     if existing.empty or "symbol" not in existing.columns or "trade_date" not in existing.columns:
-        return requested_start
+        return [(requested_start, requested_end)]
     symbol_rows = existing[existing["symbol"].astype(str).str.strip() == symbol]
     if symbol_rows.empty:
-        return requested_start
-    max_date = pd.to_datetime(symbol_rows["trade_date"]).max()
-    next_date = max_date + pd.Timedelta(days=1)
-    requested = pd.to_datetime(requested_start)
-    return _format_akshare_date(max(next_date, requested))
+        return [(requested_start, requested_end)]
+
+    existing_dates = pd.to_datetime(symbol_rows["trade_date"])
+    min_date = existing_dates.min()
+    max_date = existing_dates.max()
+    start = pd.to_datetime(requested_start)
+    end = pd.to_datetime(requested_end)
+    ranges = []
+    if start < min_date:
+        ranges.append((_format_akshare_date(start), _format_akshare_date(min_date - pd.Timedelta(days=1))))
+    if max_date < end:
+        ranges.append((_format_akshare_date(max_date + pd.Timedelta(days=1)), _format_akshare_date(end)))
+    return ranges
 
 
 def _append_run_log(
@@ -138,10 +146,13 @@ def ingest_stock_daily(
     frames = []
     report_rows = []
     normalized_symbols = [symbol.strip() for symbol in symbols if symbol.strip()]
-    requested_end = pd.to_datetime(end_date)
     for normalized_symbol in normalized_symbols:
-        fetch_start_date = _next_fetch_start(existing, normalized_symbol, start_date) if incremental else start_date
-        if pd.to_datetime(fetch_start_date) > requested_end:
+        fetch_ranges = (
+            _incremental_fetch_ranges(existing, normalized_symbol, start_date, end_date)
+            if incremental
+            else [(start_date, end_date)]
+        )
+        if not fetch_ranges:
             report_rows.append(
                 {
                     "symbol": normalized_symbol,
@@ -154,16 +165,21 @@ def ingest_stock_daily(
         last_error: Exception | None = None
         try:
             # 外部行情接口偶发网络失败时，按单只股票重试，避免整批采集被短暂抖动击穿。
-            for attempt in range(retries + 1):
-                try:
-                    frame = fetch_stock_daily(normalized_symbol, fetch_start_date, end_date, adjust=adjust)
-                    break
-                except Exception as error:  # noqa: BLE001 - 这里需要保留原始异常写入采集报告。
-                    last_error = error
-                    if attempt < retries:
-                        sleep(retry_wait_seconds)
-            else:
-                raise last_error or RuntimeError("Unknown ingestion error")
+            fetched_parts = []
+            for fetch_start_date, fetch_end_date in fetch_ranges:
+                for attempt in range(retries + 1):
+                    try:
+                        fetched_parts.append(
+                            fetch_stock_daily(normalized_symbol, fetch_start_date, fetch_end_date, adjust=adjust)
+                        )
+                        break
+                    except Exception as error:  # noqa: BLE001 - 这里需要保留原始异常写入采集报告。
+                        last_error = error
+                        if attempt < retries:
+                            sleep(retry_wait_seconds)
+                else:
+                    raise last_error or RuntimeError("Unknown ingestion error")
+            frame = pd.concat(fetched_parts, ignore_index=True) if fetched_parts else pd.DataFrame(columns=ODS_COLUMNS)
         except Exception as error:  # noqa: BLE001 - 采集阶段需要记录单票失败并继续其他股票。
             report_rows.append(
                 {
