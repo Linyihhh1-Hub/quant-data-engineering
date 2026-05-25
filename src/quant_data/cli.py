@@ -9,11 +9,14 @@ from quant_data.dimensions.market import write_stock_basic
 from quant_data.dimensions.market import write_trade_calendar
 from quant_data.evaluation.factor import evaluate_factor
 from quant_data.evaluation.cost import write_cost_sensitivity
+from quant_data.evaluation.optimization import write_strategy_optimization_report
 from quant_data.evaluation.sensitivity import parse_float_list
 from quant_data.evaluation.sensitivity import parse_int_list
 from quant_data.evaluation.sensitivity import write_parameter_sensitivity
 from quant_data.evaluation.stability import write_stability_reports
+from quant_data.evaluation.validation import write_candidate_validation_reports
 from quant_data.factors.baseline import compute_baseline_factors
+from quant_data.factors.baseline import COMPOSITE_FACTOR_COLUMNS
 from quant_data.factors.baseline import FACTOR_COLUMNS
 from quant_data.factors.baseline import ZSCORE_FACTOR_COLUMNS
 from quant_data.factors.sentiment import compute_market_sentiment
@@ -44,8 +47,10 @@ def _output_paths(output_dir: Path, factor_name: str) -> dict[str, Path]:
 
 def run_clean(input_path: Path, output_dir: Path) -> Path:
     raw = read_parquet(input_path)
-    cleaned = clean_daily_bars(raw)
-    output_path = _output_paths(output_dir, "factor")["dwd"]
+    paths = _output_paths(output_dir, "factor")
+    stock_basic = read_parquet(paths["stock_basic"]) if paths["stock_basic"].exists() else None
+    cleaned = clean_daily_bars(raw, stock_basic=stock_basic)
+    output_path = paths["dwd"]
     return write_parquet(cleaned, output_path)
 
 
@@ -153,6 +158,9 @@ def run_backtest(
     sentiment_scale: float = 0.2,
     weak_sentiment_exposure: float = 0.5,
     normal_exposure: float = 1.0,
+    min_amount: float | None = None,
+    min_volume: float | None = None,
+    exclude_st: bool = False,
 ) -> tuple[Path, Path]:
     paths = _output_paths(output_dir, factor_name)
     cleaned = read_parquet(paths["dwd"])
@@ -185,6 +193,9 @@ def run_backtest(
         sentiment_scale=sentiment_scale,
         weak_sentiment_exposure=weak_sentiment_exposure,
         normal_exposure=normal_exposure,
+        min_amount=min_amount,
+        min_volume=min_volume,
+        exclude_st=exclude_st,
     )
     daily_path = write_parquet(daily_result, paths["backtest_daily"])
     metrics_path = paths["backtest_metrics"]
@@ -195,7 +206,7 @@ def run_backtest(
 
 def _parse_factor_names(value: str | None) -> list[str]:
     if not value:
-        return [*FACTOR_COLUMNS, *ZSCORE_FACTOR_COLUMNS]
+        return [*FACTOR_COLUMNS, *ZSCORE_FACTOR_COLUMNS, *COMPOSITE_FACTOR_COLUMNS]
     return [factor.strip() for factor in value.split(",") if factor.strip()]
 
 
@@ -222,6 +233,9 @@ def run_factor_suite(
     sentiment_scale: float = 0.2,
     weak_sentiment_exposure: float = 0.5,
     normal_exposure: float = 1.0,
+    min_amount: float | None = None,
+    min_volume: float | None = None,
+    exclude_st: bool = False,
 ) -> list[tuple[Path, Path, Path]]:
     outputs = []
     for factor_name in factor_names:
@@ -247,6 +261,9 @@ def run_factor_suite(
             sentiment_scale,
             weak_sentiment_exposure,
             normal_exposure,
+            min_amount,
+            min_volume,
+            exclude_st,
         )
         outputs.append((evaluation_path, daily_path, metrics_path))
     return outputs
@@ -280,6 +297,9 @@ def run_sensitivity(
     sentiment_scale: float = 0.2,
     weak_sentiment_exposure: float = 0.5,
     normal_exposure: float = 1.0,
+    min_amount: float | None = None,
+    min_volume: float | None = None,
+    exclude_st: bool = False,
 ) -> Path:
     return write_parameter_sensitivity(
         output_dir,
@@ -300,6 +320,9 @@ def run_sensitivity(
         sentiment_scale,
         weak_sentiment_exposure,
         normal_exposure,
+        min_amount,
+        min_volume,
+        exclude_st,
     )
 
 
@@ -318,6 +341,9 @@ def run_cost_sensitivity_cli(
     sentiment_scale: float = 0.2,
     weak_sentiment_exposure: float = 0.5,
     normal_exposure: float = 1.0,
+    min_amount: float | None = None,
+    min_volume: float | None = None,
+    exclude_st: bool = False,
 ) -> Path:
     return write_cost_sensitivity(
         output_dir,
@@ -334,6 +360,39 @@ def run_cost_sensitivity_cli(
         sentiment_scale,
         weak_sentiment_exposure,
         normal_exposure,
+        min_amount,
+        min_volume,
+        exclude_st,
+    )
+
+
+def run_optimize_strategy(output_dir: Path) -> Path:
+    return write_strategy_optimization_report(output_dir)
+
+
+def run_validate_candidates(
+    output_dir: Path,
+    top_n: int,
+    validation_start: str,
+    transaction_cost: float,
+    commission_rate: float,
+    slippage_rate: float,
+    stamp_tax_rate: float,
+    min_amount: float | None = None,
+    min_volume: float | None = None,
+    exclude_st: bool = False,
+) -> tuple[Path, Path]:
+    return write_candidate_validation_reports(
+        output_dir,
+        top_n=top_n,
+        validation_start=validation_start,
+        transaction_cost=transaction_cost,
+        commission_rate=commission_rate,
+        slippage_rate=slippage_rate,
+        stamp_tax_rate=stamp_tax_rate,
+        min_amount=min_amount,
+        min_volume=min_volume,
+        exclude_st=exclude_st,
     )
 
 
@@ -373,6 +432,9 @@ def build_parser() -> argparse.ArgumentParser:
         stage.add_argument("--max-exposure", type=float, default=1.0)
         stage.add_argument("--base-exposure", type=float, default=0.6)
         stage.add_argument("--sentiment-scale", type=float, default=0.2)
+        stage.add_argument("--min-amount", type=float)
+        stage.add_argument("--min-volume", type=float)
+        stage.add_argument("--exclude-st", action="store_true")
 
     clean = subparsers.add_parser("clean")
     clean.add_argument("--input", type=Path, required=True)
@@ -485,6 +547,21 @@ def build_parser() -> argparse.ArgumentParser:
     cost_sensitivity.add_argument("--weak-sentiment-exposure", type=float, default=0.5)
     cost_sensitivity.add_argument("--normal-exposure", type=float, default=1.0)
 
+    optimize_strategy = subparsers.add_parser("optimize-strategy")
+    add_common(optimize_strategy)
+
+    validate_candidates = subparsers.add_parser("validate-candidates")
+    add_common(validate_candidates)
+    validate_candidates.add_argument("--top-n", type=int, default=5)
+    validate_candidates.add_argument("--validation-start", default="20230101")
+    validate_candidates.add_argument("--transaction-cost", type=float, default=0.001)
+    validate_candidates.add_argument("--commission-rate", type=float, default=0.0003)
+    validate_candidates.add_argument("--slippage-rate", type=float, default=0.0005)
+    validate_candidates.add_argument("--stamp-tax-rate", type=float, default=0.0005)
+    validate_candidates.add_argument("--min-amount", type=float)
+    validate_candidates.add_argument("--min-volume", type=float)
+    validate_candidates.add_argument("--exclude-st", action="store_true")
+
     load_clickhouse = subparsers.add_parser("load-clickhouse")
     add_common(load_clickhouse)
     load_clickhouse.add_argument("--factor-name", default="momentum_20d_zscore")
@@ -571,6 +648,9 @@ def main(argv: list[str] | None = None) -> int:
             args.sentiment_scale,
             args.weak_sentiment_exposure,
             args.normal_exposure,
+            args.min_amount,
+            args.min_volume,
+            args.exclude_st,
         )
     elif args.command == "factor-suite":
         run_factor_suite(
@@ -596,6 +676,9 @@ def main(argv: list[str] | None = None) -> int:
             args.sentiment_scale,
             args.weak_sentiment_exposure,
             args.normal_exposure,
+            args.min_amount,
+            args.min_volume,
+            args.exclude_st,
         )
         run_stability(args.output_dir, _parse_factor_names(args.factor_names))
     elif args.command == "stability":
@@ -620,6 +703,9 @@ def main(argv: list[str] | None = None) -> int:
             args.sentiment_scale,
             args.weak_sentiment_exposure,
             args.normal_exposure,
+            args.min_amount,
+            args.min_volume,
+            args.exclude_st,
         )
     elif args.command == "cost-sensitivity":
         run_cost_sensitivity_cli(
@@ -637,6 +723,24 @@ def main(argv: list[str] | None = None) -> int:
             args.sentiment_scale,
             args.weak_sentiment_exposure,
             args.normal_exposure,
+            args.min_amount,
+            args.min_volume,
+            args.exclude_st,
+        )
+    elif args.command == "optimize-strategy":
+        run_optimize_strategy(args.output_dir)
+    elif args.command == "validate-candidates":
+        run_validate_candidates(
+            args.output_dir,
+            args.top_n,
+            args.validation_start,
+            args.transaction_cost,
+            args.commission_rate,
+            args.slippage_rate,
+            args.stamp_tax_rate,
+            args.min_amount,
+            args.min_volume,
+            args.exclude_st,
         )
     elif args.command == "load-clickhouse":
         run_load_clickhouse(
@@ -674,6 +778,9 @@ def main(argv: list[str] | None = None) -> int:
             args.sentiment_scale,
             args.weak_sentiment_exposure,
             args.normal_exposure,
+            args.min_amount,
+            args.min_volume,
+            args.exclude_st,
         )
         run_stability(args.output_dir, [args.factor_name])
         run_sensitivity(
@@ -695,6 +802,9 @@ def main(argv: list[str] | None = None) -> int:
             args.sentiment_scale,
             args.weak_sentiment_exposure,
             args.normal_exposure,
+            args.min_amount,
+            args.min_volume,
+            args.exclude_st,
         )
         run_cost_sensitivity_cli(
             args.output_dir,
@@ -711,6 +821,22 @@ def main(argv: list[str] | None = None) -> int:
             args.sentiment_scale,
             args.weak_sentiment_exposure,
             args.normal_exposure,
+            args.min_amount,
+            args.min_volume,
+            args.exclude_st,
+        )
+        run_optimize_strategy(args.output_dir)
+        run_validate_candidates(
+            args.output_dir,
+            5,
+            "20230101",
+            args.transaction_cost,
+            args.commission_rate,
+            args.slippage_rate,
+            args.stamp_tax_rate,
+            args.min_amount,
+            args.min_volume,
+            args.exclude_st,
         )
     return 0
 

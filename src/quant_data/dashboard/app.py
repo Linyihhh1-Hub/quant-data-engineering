@@ -3,6 +3,27 @@ from pathlib import Path
 
 import pandas as pd
 
+FACTOR_LABELS = {
+    "momentum_20d": "momentum_20d | 20日动量",
+    "momentum_20d_zscore": "momentum_20d_zscore | 标准化20日动量",
+    "relative_strength_20d": "relative_strength_20d | 20日相对股票池强弱",
+    "relative_strength_20d_zscore": "relative_strength_20d_zscore | 标准化20日相对强弱",
+    "relative_strength_60d": "relative_strength_60d | 60日相对股票池强弱",
+    "relative_strength_60d_zscore": "relative_strength_60d_zscore | 标准化60日相对强弱",
+    "reversal_5d": "reversal_5d | 5日反转",
+    "reversal_5d_zscore": "reversal_5d_zscore | 标准化5日反转",
+    "volatility_20d": "volatility_20d | 20日波动率，bottom=低波动",
+    "volatility_20d_zscore": "volatility_20d_zscore | 标准化20日波动率",
+    "volume_ratio_5d": "volume_ratio_5d | 5日量比",
+    "volume_ratio_5d_zscore": "volume_ratio_5d_zscore | 标准化5日量比",
+    "ma_bias_20d": "ma_bias_20d | 20日均线偏离",
+    "ma_bias_20d_zscore": "ma_bias_20d_zscore | 标准化20日均线偏离",
+    "low_volatility_ma_bias_score": "low_volatility_ma_bias_score | 组合因子，bottom=低波动+低均线偏离",
+    "low_volatility_ma_bias_relative_strength_score": (
+        "low_volatility_ma_bias_relative_strength_score | 组合因子，bottom=低波动+低偏离+高相对强弱"
+    ),
+}
+
 
 def _read_parquet_if_exists(path: Path) -> pd.DataFrame:
     if not path.exists():
@@ -109,10 +130,20 @@ def build_pipeline_summary(data_dir: str | Path = "data") -> dict[str, object]:
 
 def list_available_factors(data_dir: str | Path = "data") -> list[str]:
     root = Path(data_dir)
-    factors = []
+    factors = set()
     for path in sorted((root / "ads").glob("factor_eval_*.parquet")):
-        factors.append(path.stem.removeprefix("factor_eval_"))
-    return factors
+        factors.add(path.stem.removeprefix("factor_eval_"))
+    for path in sorted((root / "ads").glob("backtest_metrics_*.json")):
+        factors.add(path.stem.removeprefix("backtest_metrics_"))
+    for filename in ["parameter_sensitivity.parquet", "cost_sensitivity.parquet"]:
+        frame = _read_parquet_if_exists(root / "ads" / filename)
+        if not frame.empty and "factor_name" in frame.columns:
+            factors.update(frame["factor_name"].dropna().astype(str).unique())
+    return sorted(factors)
+
+
+def factor_display_label(factor_name: str) -> str:
+    return FACTOR_LABELS.get(factor_name, factor_name)
 
 
 def default_factor_index(factors: list[str]) -> int:
@@ -326,6 +357,66 @@ def _metric_row(st, items: list[tuple[str, object, str]]) -> None:
         column.metric(label, display_value)
 
 
+def _static_line_chart(st, frame: pd.DataFrame, height: int = 320) -> None:
+    if frame.empty:
+        st.info("没有可展示的曲线数据。")
+        return
+    import altair as alt
+
+    data = frame.copy().reset_index()
+    x_column = data.columns[0]
+    data = data.melt(id_vars=x_column, var_name="series", value_name="value").dropna(subset=["value"])
+    if data.empty:
+        st.info("没有可展示的曲线数据。")
+        return
+    x_type = "temporal" if pd.api.types.is_datetime64_any_dtype(data[x_column]) else "nominal"
+    chart = (
+        alt.Chart(data)
+        .mark_line()
+        .encode(
+            x=alt.X(f"{x_column}:{'T' if x_type == 'temporal' else 'N'}", title=None),
+            y=alt.Y("value:Q", title=None),
+            color=alt.Color("series:N", title=None),
+        )
+        .properties(height=height)
+        .configure_view(strokeWidth=0)
+    )
+    st.altair_chart(chart, use_container_width=True)
+
+
+def _static_bar_chart(st, values: pd.Series | pd.DataFrame, height: int = 280) -> None:
+    import altair as alt
+
+    if isinstance(values, pd.Series):
+        data = values.rename("value").reset_index()
+    else:
+        if values.empty:
+            st.info("没有可展示的柱状图数据。")
+            return
+        data = values.copy().reset_index()
+        value_columns = [column for column in data.columns if column != data.columns[0]]
+        if not value_columns:
+            st.info("没有可展示的柱状图数据。")
+            return
+        data = data.rename(columns={value_columns[0]: "value"})
+    data = data.rename(columns={data.columns[0]: "series"}).dropna(subset=["value"])
+    if data.empty:
+        st.info("没有可展示的柱状图数据。")
+        return
+    chart = (
+        alt.Chart(data)
+        .mark_bar()
+        .encode(
+            x=alt.X("series:N", title=None, sort=None),
+            y=alt.Y("value:Q", title=None),
+            color=alt.Color("series:N", title=None, legend=None),
+        )
+        .properties(height=height)
+        .configure_view(strokeWidth=0)
+    )
+    st.altair_chart(chart, use_container_width=True)
+
+
 def render_pipeline_tab(st, data_dir: Path) -> None:
     summary = build_pipeline_summary(data_dir)
     st.write(f"日期范围：{summary['date_range']}")
@@ -448,7 +539,7 @@ def render_factor_tab(st, data_dir: Path, factor_name: str) -> None:
 
     chart_frame = evaluation.set_index("trade_date")
     st.subheader("IC / RankIC 曲线")
-    st.line_chart(chart_frame[[column for column in ["ic", "rank_ic"] if column in chart_frame.columns]])
+    _static_line_chart(st, chart_frame[[column for column in ["ic", "rank_ic"] if column in chart_frame.columns]])
 
     st.subheader("Top / Bottom / Long-Short 平均收益")
     group_columns = [
@@ -464,7 +555,7 @@ def render_factor_tab(st, data_dir: Path, factor_name: str) -> None:
                 "Top-Bottom": evaluation["long_short_return"].mean(),
             }
         )
-        st.bar_chart(group_returns)
+        _static_bar_chart(st, group_returns)
     else:
         st.info("评估结果中没有分组收益字段。")
 
@@ -504,7 +595,7 @@ def render_factor_tab(st, data_dir: Path, factor_name: str) -> None:
             ]
             if column in chart_frame.columns
         ]
-        st.line_chart(chart_frame[columns])
+        _static_line_chart(st, chart_frame[columns])
 
 
 def render_backtest_tab(st, data_dir: Path, factor_name: str) -> None:
@@ -568,12 +659,12 @@ def render_backtest_tab(st, data_dir: Path, factor_name: str) -> None:
             "hs300_benchmark_value": "沪深300净值",
         }
     )
-    st.line_chart(net_value)
+    _static_line_chart(st, net_value)
     st.caption("净值图包含：成本前策略净值、成本后策略净值、等权基准净值、沪深300净值，用于观察成本侵蚀和指数超额。")
 
     st.subheader("回撤曲线")
     if "drawdown" in chart_frame.columns:
-        st.line_chart(chart_frame[["drawdown"]])
+        _static_line_chart(st, chart_frame[["drawdown"]])
     else:
         st.info("回测结果中没有 drawdown 字段。")
 
@@ -583,7 +674,7 @@ def render_backtest_tab(st, data_dir: Path, factor_name: str) -> None:
         exposure_chart = chart_frame[exposure_columns].rename(
             columns={"raw_target_exposure": "平滑前目标仓位", "target_exposure": "实际目标仓位"}
         )
-        st.line_chart(exposure_chart)
+        _static_line_chart(st, exposure_chart)
 
     st.subheader("参数敏感性")
     sensitivity = build_parameter_sensitivity(data_dir, factor_name)
@@ -640,7 +731,7 @@ def render_backtest_tab(st, data_dir: Path, factor_name: str) -> None:
     else:
         chart_columns = [column for column in ["cost_scenario", "total_return"] if column in cost_sensitivity.columns]
         if len(chart_columns) == 2:
-            st.bar_chart(cost_sensitivity.set_index("cost_scenario")[["total_return"]])
+            _static_bar_chart(st, cost_sensitivity.set_index("cost_scenario")[["total_return"]])
         display = cost_sensitivity.copy()
         percent_columns = [
             "commission",
@@ -690,7 +781,16 @@ def main() -> None:
     if not factors:
         st.warning("未找到因子评估文件，请先运行数据流水线。")
         return
-    factor_name = st.sidebar.selectbox("因子", factors, index=default_factor_index(factors))
+    factor_name = st.sidebar.selectbox(
+        "因子",
+        factors,
+        index=default_factor_index(factors),
+        format_func=factor_display_label,
+    )
+    backtest_summary = build_backtest_summary(data_dir, factor_name)
+    direction = backtest_summary["metrics"].get("factor_direction")
+    if direction:
+        st.sidebar.caption(f"当前回测方向：{direction}。top=买高分组，bottom=买低分组。")
 
     tabs = st.tabs(["数据链路概览", "因子有效性评估", "策略回测表现"])
     with tabs[0]:

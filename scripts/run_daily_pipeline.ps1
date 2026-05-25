@@ -8,7 +8,7 @@ param(
     [string]$SymbolsFile = "configs/symbols.csv",
     [bool]$BuildHs300Symbols = $false,
     [string]$FactorName = "momentum_20d_zscore",
-    [string]$FactorNames = "momentum_20d,reversal_5d,volatility_20d,volume_ratio_5d,ma_bias_20d,momentum_20d_zscore,reversal_5d_zscore,volatility_20d_zscore,volume_ratio_5d_zscore,ma_bias_20d_zscore",
+    [string]$FactorNames = "momentum_20d,relative_strength_20d,relative_strength_60d,reversal_5d,volatility_20d,volume_ratio_5d,ma_bias_20d,momentum_20d_zscore,relative_strength_20d_zscore,relative_strength_60d_zscore,reversal_5d_zscore,volatility_20d_zscore,volume_ratio_5d_zscore,ma_bias_20d_zscore,low_volatility_ma_bias_score,low_volatility_ma_bias_relative_strength_score",
     [int]$Groups = 5,
     [int]$MinRowsPerDate = 20,
     [double]$AbnormalReturnThreshold = 0.25,
@@ -32,6 +32,9 @@ param(
     [double]$SentimentScale = 0.2,
     [double]$WeakSentimentExposure = 0.5,
     [double]$NormalExposure = 1.0,
+    [Nullable[double]]$MinAmount = $null,
+    [Nullable[double]]$MinVolume = $null,
+    [bool]$ExcludeSt = $false,
     [int]$Retries = 3,
     [double]$RetryWaitSeconds = 2,
     [double]$RequestIntervalSeconds = 0.5,
@@ -157,6 +160,15 @@ if ($null -ne $SentimentThreshold) {
         "--normal-exposure", "$NormalExposure"
     )
 }
+if ($null -ne $MinAmount) {
+    $RunAllArgs += @("--min-amount", "$MinAmount")
+}
+if ($null -ne $MinVolume) {
+    $RunAllArgs += @("--min-volume", "$MinVolume")
+}
+if ($ExcludeSt) {
+    $RunAllArgs += "--exclude-st"
+}
 & $Python @RunAllArgs
 
 $FactorSuiteArgs = @(
@@ -191,7 +203,41 @@ if ($null -ne $SentimentThreshold) {
         "--normal-exposure", "$NormalExposure"
     )
 }
+if ($null -ne $MinAmount) {
+    $FactorSuiteArgs += @("--min-amount", "$MinAmount")
+}
+if ($null -ne $MinVolume) {
+    $FactorSuiteArgs += @("--min-volume", "$MinVolume")
+}
+if ($ExcludeSt) {
+    $FactorSuiteArgs += "--exclude-st"
+}
 & $Python @FactorSuiteArgs
+
+Write-Host "Refresh strategy optimization report"
+& $Python -m quant_data.cli optimize-strategy --output-dir data
+
+Write-Host "Validate top strategy candidates"
+$ValidateArgs = @(
+    "-m", "quant_data.cli", "validate-candidates",
+    "--output-dir", "data",
+    "--top-n", "5",
+    "--validation-start", "20230101",
+    "--transaction-cost", "$TransactionCost",
+    "--commission-rate", "$CommissionRate",
+    "--slippage-rate", "$SlippageRate",
+    "--stamp-tax-rate", "$StampTaxRate"
+)
+if ($null -ne $MinAmount) {
+    $ValidateArgs += @("--min-amount", "$MinAmount")
+}
+if ($null -ne $MinVolume) {
+    $ValidateArgs += @("--min-volume", "$MinVolume")
+}
+if ($ExcludeSt) {
+    $ValidateArgs += "--exclude-st"
+}
+& $Python @ValidateArgs
 
 if ($LoadClickHouse -and $ClickHousePassword) {
     Write-Host "Step 6/6 Load results into ClickHouse"
@@ -247,6 +293,9 @@ print_frame_status("factor_yearly_summary", "data/ads/factor_yearly_summary.parq
 print_frame_status("factor_rolling_summary", "data/ads/factor_rolling_summary.parquet")
 print_frame_status("parameter_sensitivity", "data/ads/parameter_sensitivity.parquet")
 print_frame_status("cost_sensitivity", "data/ads/cost_sensitivity.parquet")
+print_frame_status("strategy_optimization_report", "data/ads/strategy_optimization_report.parquet")
+print_frame_status("candidate_validation_report", "data/ads/candidate_validation_report.parquet")
+print_frame_status("candidate_yearly_validation", "data/ads/candidate_yearly_validation.parquet")
 
 metrics_path = Path(f"data/ads/backtest_metrics_{factor_name}.json")
 if metrics_path.exists():

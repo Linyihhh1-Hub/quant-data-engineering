@@ -31,6 +31,9 @@ def run_cost_sensitivity(
     sentiment_scale: float = 0.2,
     weak_sentiment_exposure: float = 0.5,
     normal_exposure: float = 1.0,
+    min_amount: float | None = None,
+    min_volume: float | None = None,
+    exclude_st: bool = False,
 ) -> pd.DataFrame:
     rows = []
     for scenario, costs in COST_SCENARIOS.items():
@@ -56,6 +59,9 @@ def run_cost_sensitivity(
             sentiment_scale=sentiment_scale,
             weak_sentiment_exposure=weak_sentiment_exposure,
             normal_exposure=normal_exposure,
+            min_amount=min_amount,
+            min_volume=min_volume,
+            exclude_st=exclude_st,
         )
         rows.append(
             {
@@ -72,6 +78,9 @@ def run_cost_sensitivity(
                 "max_drawdown": float(metrics.get("max_drawdown", 0.0)),
                 "sharpe": float(metrics.get("sharpe", 0.0)),
                 "turnover": float(metrics.get("turnover", 0.0)),
+                "min_amount": float(metrics.get("min_amount", 0.0)),
+                "min_volume": float(metrics.get("min_volume", 0.0)),
+                "exclude_st": float(metrics.get("exclude_st", 0.0)),
             }
         )
     return pd.DataFrame(rows)
@@ -92,6 +101,9 @@ def write_cost_sensitivity(
     sentiment_scale: float = 0.2,
     weak_sentiment_exposure: float = 0.5,
     normal_exposure: float = 1.0,
+    min_amount: float | None = None,
+    min_volume: float | None = None,
+    exclude_st: bool = False,
 ) -> Path:
     root = Path(data_dir)
     market_sentiment_path = root / "ads" / "market_sentiment_daily.parquet"
@@ -116,5 +128,8 @@ def write_cost_sensitivity(
         sentiment_scale=sentiment_scale,
         weak_sentiment_exposure=weak_sentiment_exposure,
         normal_exposure=normal_exposure,
+        min_amount=min_amount,
+        min_volume=min_volume,
+        exclude_st=exclude_st,
     )
     return write_parquet(result, root / "ads" / "cost_sensitivity.parquet")

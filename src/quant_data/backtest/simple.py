@@ -93,6 +93,42 @@ def _tradability_snapshot(returns: pd.DataFrame, trade_date: pd.Timestamp) -> di
     }
 
 
+def _tradability_filters_for_date(daily_bars: pd.DataFrame, signal_date: pd.Timestamp) -> pd.DataFrame:
+    available_columns = [
+        column
+        for column in ["trade_date", "symbol", "amount", "volume", "is_st"]
+        if column in daily_bars.columns
+    ]
+    if not {"trade_date", "symbol"}.issubset(available_columns):
+        return pd.DataFrame({"symbol": []})
+    frame = daily_bars[available_columns].copy()
+    frame["trade_date"] = pd.to_datetime(frame["trade_date"]).astype("datetime64[ns]")
+    return frame[frame["trade_date"] == signal_date].drop_duplicates(subset=["symbol"], keep="last")
+
+
+def _apply_universe_filters(
+    snapshot: pd.DataFrame,
+    daily_bars: pd.DataFrame,
+    signal_date: pd.Timestamp,
+    min_amount: float | None,
+    min_volume: float | None,
+    exclude_st: bool,
+) -> pd.DataFrame:
+    if snapshot.empty:
+        return snapshot
+    filters = _tradability_filters_for_date(daily_bars, signal_date)
+    if filters.empty:
+        return snapshot
+    result = snapshot.merge(filters.drop(columns=["trade_date"], errors="ignore"), on="symbol", how="left")
+    if min_amount is not None and "amount" in result.columns:
+        result = result[result["amount"].fillna(0) >= min_amount]
+    if min_volume is not None and "volume" in result.columns:
+        result = result[result["volume"].fillna(0) >= min_volume]
+    if exclude_st and "is_st" in result.columns:
+        result = result[result["is_st"] != True]  # noqa: E712 - preserve pandas nullable bool semantics.
+    return result
+
+
 def _apply_trade_constraints(
     current_positions: set[str],
     target_positions: set[str],
@@ -255,6 +291,9 @@ def run_simple_backtest(
     sentiment_scale: float = 0.2,
     weak_sentiment_exposure: float = 0.5,
     normal_exposure: float = 1.0,
+    min_amount: float | None = None,
+    min_volume: float | None = None,
+    exclude_st: bool = False,
 ) -> tuple[pd.DataFrame, dict[str, float]]:
     if rebalance_interval < 1:
         raise ValueError("rebalance_interval must be >= 1")
@@ -274,6 +313,10 @@ def run_simple_backtest(
         raise ValueError("min_exposure and max_exposure must satisfy 0 <= min <= max <= 1")
     if weak_sentiment_exposure > normal_exposure:
         raise ValueError("weak_sentiment_exposure must be less than or equal to normal_exposure")
+    if min_amount is not None and min_amount < 0:
+        raise ValueError("min_amount must be >= 0")
+    if min_volume is not None and min_volume < 0:
+        raise ValueError("min_volume must be >= 0")
 
     factor_frame = factors.copy()
     factor_frame["trade_date"] = pd.to_datetime(factor_frame["trade_date"]).astype("datetime64[ns]")
@@ -310,6 +353,14 @@ def run_simple_backtest(
         if timestamp in rebalance_dates:
             signal_date = next(signal for signal, execution in execution_dates.items() if execution == timestamp)
             snapshot = factor_frame[factor_frame["trade_date"] == signal_date]
+            snapshot = _apply_universe_filters(
+                snapshot,
+                daily_bars,
+                signal_date,
+                min_amount=min_amount,
+                min_volume=min_volume,
+                exclude_st=exclude_st,
+            )
             target_positions = select_buffered_symbols(
                 snapshot,
                 factor_name,
@@ -438,6 +489,9 @@ def run_simple_backtest(
         "sentiment_smooth_alpha": float(sentiment_smooth_alpha),
         "average_exposure": float(result["target_exposure"].mean()) if not result.empty else 0.0,
         "exposure_turnover": exposure_turnover,
+        "min_amount": float(min_amount or 0.0),
+        "min_volume": float(min_volume or 0.0),
+        "exclude_st": float(bool(exclude_st)),
     }
     return result[
         [

@@ -17,7 +17,27 @@ def normalize_symbol(symbol: str) -> str:
     return value
 
 
-def clean_daily_bars(frame: pd.DataFrame) -> pd.DataFrame:
+def _merge_stock_basic(frame: pd.DataFrame, stock_basic: pd.DataFrame | None) -> pd.DataFrame:
+    if stock_basic is None or stock_basic.empty:
+        result = frame.copy()
+        if "is_st" not in result.columns:
+            result["is_st"] = False
+        return result
+
+    basic = stock_basic.copy()
+    if "symbol" not in basic.columns:
+        raise ValueError("stock_basic must include symbol")
+    basic["symbol"] = basic["symbol"].map(normalize_symbol)
+    columns = [column for column in ["symbol", "name", "exchange", "is_st"] if column in basic.columns]
+    basic = basic[columns].drop_duplicates(subset=["symbol"], keep="last")
+    result = frame.merge(basic, on="symbol", how="left")
+    if "is_st" not in result.columns:
+        result["is_st"] = False
+    result["is_st"] = result["is_st"].fillna(False).astype(bool)
+    return result
+
+
+def clean_daily_bars(frame: pd.DataFrame, stock_basic: pd.DataFrame | None = None) -> pd.DataFrame:
     required_columns = {"trade_date", "symbol", *NUMERIC_COLUMNS}
     missing_columns = required_columns - set(frame.columns)
     if missing_columns:
@@ -43,4 +63,4 @@ def clean_daily_bars(frame: pd.DataFrame) -> pd.DataFrame:
     # 第一版涨跌停标识基于复权收盘价近似判断，用于回测交易约束；后续可替换为交易所精确涨跌停价。
     result["is_limit_up"] = (prev_close.notna()) & (result["close"] >= prev_close * (1 + limit_rate) * 0.999)
     result["is_limit_down"] = (prev_close.notna()) & (result["close"] <= prev_close * (1 - limit_rate) * 1.001)
-    return result
+    return _merge_stock_basic(result, stock_basic)

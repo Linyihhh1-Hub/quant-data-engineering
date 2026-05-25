@@ -47,6 +47,7 @@ Streamlit dashboard
 
 - AkShare daily data ingestion with stock pool files, retry, incremental updates, run logs, and fallback handling.
 - Layered Parquet datasets for ODS, DWD, ADS, reports, and dimension tables.
+- DWD daily bars can enrich market data with `stock_basic` fields such as `name`, `exchange`, and `is_st` for tradability filters.
 - Data quality checks for primary key uniqueness, required fields, price validity, volume validity, date completeness, and abnormal returns.
 - Baseline price-volume factors:
   - `momentum_20d`
@@ -54,6 +55,9 @@ Streamlit dashboard
   - `volatility_20d`
   - `volume_ratio_5d`
   - `ma_bias_20d`
+  - `relative_strength_20d` and `relative_strength_60d`
+  - `low_volatility_ma_bias_score`, a composite low-volatility and low-moving-average-bias score
+  - `low_volatility_ma_bias_relative_strength_score`, a composite low-volatility, low-moving-average-bias, and high-relative-strength score
 - Market sentiment factors such as market breadth, trading activity, profit effect, and rolling sentiment score.
 - Cross-sectional factor preprocessing with 1% / 99% winsorization and daily z-score standardization.
 - Multi-factor evaluation with IC, RankIC, positive IC ratio, ICIR, grouped returns, and long-short return.
@@ -62,6 +66,9 @@ Streamlit dashboard
 - Holding-buffer backtest logic with `entry_quantile` and `exit_quantile` to reduce unnecessary turnover.
 - Parameter sensitivity analysis across factor direction, holding quantiles, and rebalance intervals to reduce single-parameter overfitting risk.
 - Cost sensitivity analysis across no-cost, low-cost, default-cost, and high-cost assumptions.
+- Strategy optimization report that ranks backtest and sensitivity candidates, flags cost drag / drawdown / turnover risk, and suggests the next parameter action.
+- Candidate validation reports that rerun top-ranked strategies across train / validation splits and yearly windows.
+- Tradability filters for minimum amount, minimum volume, and ST exclusion during backtest candidate selection.
 - Factor backtest with next-trading-day execution, rebalance interval, before-cost / after-cost net values, equal-weight and CSI 300 benchmarks, transaction costs, slippage, stamp tax, suspension handling, limit-up / limit-down constraints, and smooth sentiment-based exposure control.
 - ClickHouse loading and query interface for local analytical use.
 - Streamlit dashboard with data pipeline overview, factor evaluation, and strategy backtest performance.
@@ -125,6 +132,8 @@ incremental ingestion
 -> yearly / rolling stability
 -> parameter sensitivity
 -> cost sensitivity
+-> strategy optimization report
+-> candidate validation
 -> optional ClickHouse loading
 ```
 
@@ -165,6 +174,11 @@ You can also run diagnostic modules separately:
 python -m quant_data.cli backtest --output-dir data --factor-name volatility_20d --factor-direction bottom
 python -m quant_data.cli sensitivity --output-dir data --factor-names momentum_20d,reversal_5d,volatility_20d
 python -m quant_data.cli cost-sensitivity --output-dir data --factor-name momentum_20d_zscore
+python -m quant_data.cli optimize-strategy --output-dir data
+python -m quant_data.cli validate-candidates --output-dir data --top-n 5 --validation-start 20230101
+python -m quant_data.cli backtest --output-dir data --factor-name volatility_20d --factor-direction bottom --min-amount 100000000 --exclude-st
+python -m quant_data.cli backtest --output-dir data --factor-name low_volatility_ma_bias_score --factor-direction bottom --top-quantile 0.2 --rebalance-interval 60 --min-amount 100000000 --exclude-st
+python -m quant_data.cli backtest --output-dir data --factor-name low_volatility_ma_bias_relative_strength_score --factor-direction bottom --top-quantile 0.1 --rebalance-interval 60 --min-amount 100000000 --exclude-st
 ```
 
 ClickHouse loading is enabled when a password is available. You can set it in the current PowerShell session:
@@ -216,6 +230,9 @@ data/ads/factor_yearly_summary.parquet
 data/ads/factor_rolling_summary.parquet
 data/ads/parameter_sensitivity.parquet
 data/ads/cost_sensitivity.parquet
+data/ads/strategy_optimization_report.parquet
+data/ads/candidate_validation_report.parquet
+data/ads/candidate_yearly_validation.parquet
 ```
 
 When ClickHouse loading is enabled, the main analytical tables are:
@@ -233,6 +250,9 @@ ads_factor_yearly_summary
 ads_factor_rolling_summary
 ads_parameter_sensitivity
 ads_cost_sensitivity
+ads_strategy_optimization_report
+ads_candidate_validation_report
+ads_candidate_yearly_validation
 ops_ingestion_report
 ops_ingestion_runs
 ops_data_quality_report

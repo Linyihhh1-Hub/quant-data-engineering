@@ -110,6 +110,9 @@ def test_load_pipeline_outputs_loads_ops_tables_when_reports_exist(tmp_path):
     rolling = pd.DataFrame({"trade_date": [pd.Timestamp("2024-01-02")], "factor_name": ["momentum_20d"], "rolling_60d_rank_ic_mean": [0.1]})
     sensitivity = pd.DataFrame({"factor_name": ["momentum_20d"], "top_quantile": [0.1], "total_return": [0.1]})
     cost_sensitivity = pd.DataFrame({"factor_name": ["momentum_20d"], "cost_scenario": ["default_cost"], "total_return": [0.1]})
+    optimization = pd.DataFrame({"rank": [1], "factor_name": ["momentum_20d"], "score": [0.8], "suggested_action": ["keep"]})
+    validation = pd.DataFrame({"source_rank": [1], "factor_name": ["momentum_20d"], "validation_status": ["pass"]})
+    yearly_validation = pd.DataFrame({"source_rank": [1], "factor_name": ["momentum_20d"], "year": [2024]})
 
     (tmp_path / "reports").mkdir()
     (tmp_path / "dim").mkdir()
@@ -123,6 +126,9 @@ def test_load_pipeline_outputs_loads_ops_tables_when_reports_exist(tmp_path):
     rolling.to_parquet(tmp_path / "ads" / "factor_rolling_summary.parquet", index=False)
     sensitivity.to_parquet(tmp_path / "ads" / "parameter_sensitivity.parquet", index=False)
     cost_sensitivity.to_parquet(tmp_path / "ads" / "cost_sensitivity.parquet", index=False)
+    optimization.to_parquet(tmp_path / "ads" / "strategy_optimization_report.parquet", index=False)
+    validation.to_parquet(tmp_path / "ads" / "candidate_validation_report.parquet", index=False)
+    yearly_validation.to_parquet(tmp_path / "ads" / "candidate_yearly_validation.parquet", index=False)
 
     loaded = load_pipeline_outputs(client, tmp_path, factor_name="momentum_20d")
 
@@ -133,10 +139,13 @@ def test_load_pipeline_outputs_loads_ops_tables_when_reports_exist(tmp_path):
     assert loaded["ads_factor_rolling_summary"] == 1
     assert loaded["ads_parameter_sensitivity"] == 1
     assert loaded["ads_cost_sensitivity"] == 1
+    assert loaded["ads_strategy_optimization_report"] == 1
+    assert loaded["ads_candidate_validation_report"] == 1
+    assert loaded["ads_candidate_yearly_validation"] == 1
     assert loaded["ops_ingestion_report"] == 1
     assert loaded["ops_ingestion_runs"] == 1
     assert loaded["ops_data_quality_report"] == 1
-    assert [table for table, _ in client.inserts][-10:] == [
+    assert [table for table, _ in client.inserts][-13:] == [
         "dim_trade_calendar",
         "dim_stock_basic",
         "dim_hs300_index",
@@ -144,6 +153,9 @@ def test_load_pipeline_outputs_loads_ops_tables_when_reports_exist(tmp_path):
         "ads_factor_rolling_summary",
         "ads_parameter_sensitivity",
         "ads_cost_sensitivity",
+        "ads_strategy_optimization_report",
+        "ads_candidate_validation_report",
+        "ads_candidate_yearly_validation",
         "ops_ingestion_report",
         "ops_ingestion_runs",
         "ops_data_quality_report",

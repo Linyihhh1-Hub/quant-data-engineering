@@ -13,6 +13,7 @@ from quant_data.dashboard.app import (
     build_yearly_summary,
     default_factor_index,
     estimate_unscaled_strategy_value,
+    factor_display_label,
     interpret_factor_strength,
     list_available_factors,
 )
@@ -278,10 +279,28 @@ def test_list_available_factors_uses_factor_eval_files(tmp_path):
     assert list_available_factors(tmp_path) == ["momentum_20d", "reversal_5d"]
 
 
+def test_list_available_factors_includes_backtest_only_factor(tmp_path):
+    write_dashboard_fixture(tmp_path)
+    (tmp_path / "ads" / "backtest_metrics_low_volatility_ma_bias_score.json").write_text(
+        json.dumps({"total_return": 0.1}),
+        encoding="utf-8",
+    )
+
+    assert "low_volatility_ma_bias_score" in list_available_factors(tmp_path)
+
+
 def test_default_factor_index_prefers_standardized_momentum():
     factors = ["ma_bias_20d", "momentum_20d", "momentum_20d_zscore"]
 
     assert default_factor_index(factors) == 2
+
+
+def test_factor_display_label_explains_bottom_direction():
+    label = factor_display_label("low_volatility_ma_bias_relative_strength_score")
+
+    assert "组合因子" in label
+    assert "bottom" in label
+    assert "相对强弱" in label
 
 
 def test_build_factor_comparison_summarizes_all_available_factors(tmp_path):

@@ -84,6 +84,50 @@ def test_cli_run_all_writes_pipeline_outputs(tmp_path):
     }.issubset(metrics)
 
 
+def test_cli_run_all_merges_stock_basic_into_dwd(tmp_path):
+    raw_path = tmp_path / "ods" / "stock_daily.parquet"
+    raw_path.parent.mkdir(parents=True)
+    make_pipeline_raw_frame().to_parquet(raw_path, index=False)
+    dim_dir = tmp_path / "dim"
+    dim_dir.mkdir()
+    pd.DataFrame(
+        [
+            {"symbol": "000001.SZ", "name": "平安银行", "exchange": "SZ", "is_st": False},
+            {"symbol": "000002.SZ", "name": "ST测试", "exchange": "SZ", "is_st": True},
+            {"symbol": "600000.SH", "name": "浦发银行", "exchange": "SH", "is_st": False},
+            {"symbol": "600001.SH", "name": "邯郸钢铁", "exchange": "SH", "is_st": False},
+        ]
+    ).to_parquet(dim_dir / "stock_basic.parquet", index=False)
+
+    exit_code = main(
+        [
+            "run-all",
+            "--input",
+            str(raw_path),
+            "--output-dir",
+            str(tmp_path),
+            "--factor-name",
+            "momentum_20d",
+            "--horizon",
+            "1",
+            "--groups",
+            "2",
+            "--top-quantile",
+            "0.5",
+            "--rebalance-interval",
+            "5",
+            "--min-rows-per-date",
+            "4",
+            "--exclude-st",
+        ]
+    )
+
+    dwd = pd.read_parquet(tmp_path / "dwd" / "stock_daily.parquet")
+    assert exit_code == 0
+    assert {"is_st", "name", "exchange"}.issubset(dwd.columns)
+    assert dwd.loc[dwd["symbol"] == "000002.SZ", "is_st"].all()
+
+
 def test_cli_run_all_supports_sentiment_timing_backtest(tmp_path):
     raw_path = tmp_path / "ods" / "stock_daily.parquet"
     raw_path.parent.mkdir(parents=True)
@@ -274,6 +318,78 @@ def test_cli_sensitivity_writes_parameter_grid(tmp_path):
     result = pd.read_parquet(tmp_path / "ads" / "parameter_sensitivity.parquet")
     assert exit_code == 0
     assert len(result) == 4
+
+
+def test_cli_optimize_strategy_writes_recommendation_report(tmp_path):
+    ads_dir = tmp_path / "ads"
+    ads_dir.mkdir(parents=True)
+    (ads_dir / "backtest_metrics_factor.json").write_text(
+        json.dumps(
+            {
+                "total_return": 0.2,
+                "annualized_return": 0.05,
+                "sharpe": 0.6,
+                "max_drawdown": -0.2,
+                "turnover": 20.0,
+                "cost_drag": 0.03,
+                "cost_to_return": 0.1,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    exit_code = main(["optimize-strategy", "--output-dir", str(tmp_path)])
+
+    result = pd.read_parquet(tmp_path / "ads" / "strategy_optimization_report.parquet")
+    assert exit_code == 0
+    assert result.loc[0, "factor_name"] == "factor"
+    assert "suggested_action" in result.columns
+
+
+def test_cli_validate_candidates_writes_reports(tmp_path):
+    ads_dir = tmp_path / "ads"
+    dwd_dir = tmp_path / "dwd"
+    ads_dir.mkdir(parents=True)
+    dwd_dir.mkdir(parents=True)
+    rows = []
+    factor_rows = []
+    for day_index in range(12):
+        trade_date = pd.Timestamp("2024-01-01") + pd.Timedelta(days=day_index)
+        for symbol_index, symbol in enumerate(["AAA", "BBB", "CCC", "DDD"]):
+            rows.append({"trade_date": trade_date, "symbol": symbol, "close": 10 + day_index + symbol_index})
+            factor_rows.append({"trade_date": trade_date, "symbol": symbol, "test_factor": float(symbol_index)})
+    pd.DataFrame(rows).to_parquet(dwd_dir / "stock_daily.parquet", index=False)
+    pd.DataFrame(factor_rows).to_parquet(ads_dir / "factor_wide_daily.parquet", index=False)
+    pd.DataFrame(
+        [
+            {
+                "rank": 1,
+                "source": "backtest_metrics",
+                "factor_name": "test_factor",
+                "factor_direction": "top",
+                "top_quantile": 0.5,
+                "rebalance_interval": 1,
+            }
+        ]
+    ).to_parquet(ads_dir / "strategy_optimization_report.parquet", index=False)
+
+    exit_code = main(
+        [
+            "validate-candidates",
+            "--output-dir",
+            str(tmp_path),
+            "--top-n",
+            "1",
+            "--validation-start",
+            "20240107",
+            "--transaction-cost",
+            "0",
+        ]
+    )
+
+    assert exit_code == 0
+    assert (ads_dir / "candidate_validation_report.parquet").exists()
+    assert (ads_dir / "candidate_yearly_validation.parquet").exists()
 
 
 def test_cli_ingest_akshare_writes_ods_file(monkeypatch, tmp_path):

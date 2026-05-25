@@ -220,6 +220,42 @@ def test_run_simple_backtest_respects_limit_and_fee_constraints():
     assert metrics["total_cost"] > 0
 
 
+def test_run_simple_backtest_filters_untradable_universe_before_selection():
+    daily = pd.DataFrame(
+        [
+            {"trade_date": "2024-01-01", "symbol": "AAA", "close": 10.0, "amount": 1_000_000.0, "volume": 10_000.0, "is_st": False},
+            {"trade_date": "2024-01-01", "symbol": "BBB", "close": 10.0, "amount": 100.0, "volume": 10_000.0, "is_st": False},
+            {"trade_date": "2024-01-01", "symbol": "CCC", "close": 10.0, "amount": 1_000_000.0, "volume": 10_000.0, "is_st": True},
+            {"trade_date": "2024-01-02", "symbol": "AAA", "close": 11.0, "amount": 1_000_000.0, "volume": 10_000.0, "is_st": False},
+            {"trade_date": "2024-01-02", "symbol": "BBB", "close": 20.0, "amount": 100.0, "volume": 10_000.0, "is_st": False},
+            {"trade_date": "2024-01-02", "symbol": "CCC", "close": 20.0, "amount": 1_000_000.0, "volume": 10_000.0, "is_st": True},
+        ]
+    )
+    factors = pd.DataFrame(
+        [
+            {"trade_date": "2024-01-01", "symbol": "AAA", "test_factor": 1.0},
+            {"trade_date": "2024-01-01", "symbol": "BBB", "test_factor": 3.0},
+            {"trade_date": "2024-01-01", "symbol": "CCC", "test_factor": 2.0},
+        ]
+    )
+
+    result, metrics = run_simple_backtest(
+        factors,
+        daily,
+        "test_factor",
+        top_quantile=1.0,
+        rebalance_interval=1,
+        transaction_cost=0.0,
+        min_amount=1_000_000.0,
+        exclude_st=True,
+    )
+
+    assert result.loc[1, "positions_count"] == 1
+    assert round(result.loc[1, "daily_return"], 6) == 0.1
+    assert metrics["min_amount"] == 1_000_000.0
+    assert metrics["exclude_st"] == 1.0
+
+
 def test_run_simple_backtest_reduces_exposure_when_sentiment_is_weak():
     daily = pd.DataFrame(
         [

@@ -36,6 +36,9 @@ def run_parameter_sensitivity(
     sentiment_scale: float = 0.2,
     weak_sentiment_exposure: float = 0.5,
     normal_exposure: float = 1.0,
+    min_amount: float | None = None,
+    min_volume: float | None = None,
+    exclude_st: bool = False,
 ) -> pd.DataFrame:
     rows = []
     for factor_direction in factor_directions:
@@ -65,6 +68,9 @@ def run_parameter_sensitivity(
                     sentiment_scale=sentiment_scale,
                     weak_sentiment_exposure=weak_sentiment_exposure,
                     normal_exposure=normal_exposure,
+                    min_amount=min_amount,
+                    min_volume=min_volume,
+                    exclude_st=exclude_st,
                 )
                 rows.append(
                     {
@@ -87,6 +93,9 @@ def run_parameter_sensitivity(
                         "cost_drag": float(metrics.get("cost_drag", 0.0)),
                         "cost_to_return": float(metrics.get("cost_to_return", 0.0)),
                         "average_exposure": float(metrics.get("average_exposure", 0.0)),
+                        "min_amount": float(metrics.get("min_amount", 0.0)),
+                        "min_volume": float(metrics.get("min_volume", 0.0)),
+                        "exclude_st": float(metrics.get("exclude_st", 0.0)),
                     }
                 )
     return pd.DataFrame(rows).sort_values(
@@ -114,6 +123,9 @@ def write_parameter_sensitivity(
     sentiment_scale: float = 0.2,
     weak_sentiment_exposure: float = 0.5,
     normal_exposure: float = 1.0,
+    min_amount: float | None = None,
+    min_volume: float | None = None,
+    exclude_st: bool = False,
 ) -> Path:
     root = Path(data_dir)
     market_sentiment_path = root / "ads" / "market_sentiment_daily.parquet"
@@ -146,6 +158,9 @@ def write_parameter_sensitivity(
             sentiment_scale=sentiment_scale,
             weak_sentiment_exposure=weak_sentiment_exposure,
             normal_exposure=normal_exposure,
+            min_amount=min_amount,
+            min_volume=min_volume,
+            exclude_st=exclude_st,
         )
         for factor_name in factor_list
     ]

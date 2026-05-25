@@ -42,3 +42,27 @@ def test_clean_daily_bars_adds_trading_constraint_flags():
     assert result.loc[1, "is_limit_up"] == True
     assert result.loc[2, "is_limit_down"] == True
     assert result.loc[2, "is_suspended"] == True
+
+
+def test_clean_daily_bars_merges_stock_basic_flags():
+    frame = pd.DataFrame(
+        [
+            {"trade_date": "2024-01-01", "symbol": "000001", "open": 10, "high": 10, "low": 10, "close": 10, "volume": 100, "amount": 1000},
+            {"trade_date": "2024-01-01", "symbol": "600000", "open": 20, "high": 20, "low": 20, "close": 20, "volume": 100, "amount": 2000},
+        ]
+    )
+    stock_basic = pd.DataFrame(
+        [
+            {"symbol": "000001.SZ", "name": "平安银行", "exchange": "SZ", "is_st": False},
+            {"symbol": "600000.SH", "name": "ST浦发", "exchange": "SH", "is_st": True},
+        ]
+    )
+
+    result = clean_daily_bars(frame, stock_basic=stock_basic)
+
+    pingan = result[result["symbol"] == "000001.SZ"].iloc[0]
+    st_stock = result[result["symbol"] == "600000.SH"].iloc[0]
+    assert pingan["is_st"] == False
+    assert pingan["exchange"] == "SZ"
+    assert pingan["name"] == "平安银行"
+    assert st_stock["is_st"] == True
